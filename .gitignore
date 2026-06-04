@@ -1,0 +1,8 @@
+# Rust Rover
+.idea/
+
+# AtomCode
+.atomcode/
+
+# Artifacts
+target/

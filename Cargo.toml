@@ -1,0 +1,30 @@
+[package]
+name = "atomcode-switch"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# GUI 框架
+eframe = "0.27.2"
+egui = "0.27.2"
+
+# 序列化与反序列化
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+toml = "0.8"
+
+# 路径与系统
+directories = "5.0"
+
+# 时间处理
+chrono = "0.4"
+
+# 唯一ID生成
+uuid = { version = "1.0", features = ["v4"] }
+
+# 文件对话框
+rfd = "0.14"
+
+# 图片加载（用于图标）
+image = "0.25"
