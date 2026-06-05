@@ -1,6 +1,7 @@
 use crate::models::{AppConfig, ManagedAccount};
 use crate::{atomcode_io, config_io};
 use eframe::egui;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 // ============ GitHub CSS 颜色常量 ============
 const GITHUB_BG: egui::Color32 = egui::Color32::from_rgb(246, 248, 250);     // #f6f8fa -> 稍浅
@@ -355,22 +356,28 @@ impl AtomcodeSwitchApp {
         self.status_message = "账号已删除".to_string();
     }
 
-    /// 获取当前时间字符串
+    /// 获取当前时间字符串 (HH:MM)
     fn current_time_str() -> String {
-        chrono::Local::now().format("%H:%M").to_string()
+        let secs = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let mins = (secs / 60) % 1440;
+        format!("{:02}:{:02}", mins / 60, mins % 60)
     }
 
-    /// 生成默认重置时间
+    /// 生成默认重置时间（当前时间 + 1小时）
     fn default_reset_time() -> String {
-        let now = chrono::Local::now();
-        let reset = now + chrono::Duration::hours(1);
-        let diff = reset.signed_duration_since(now);
-        let mins = diff.num_minutes();
+        let secs = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let now_mins = (secs / 60) % 1440;
+        let reset_mins = (now_mins + 60) % 1440;
         format!(
-            "{} ({}m {}s)",
-            reset.format("%H:%M"),
-            mins,
-            diff.num_seconds() - mins * 60
+            "{:02}:{:02} (60m 0s)",
+            reset_mins / 60,
+            reset_mins % 60
         )
     }
 

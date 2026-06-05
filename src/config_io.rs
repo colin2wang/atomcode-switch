@@ -1,8 +1,15 @@
 use crate::models::AppConfig;
-use directories::BaseDirs;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
+
+/// 获取用户主目录
+fn home_dir() -> Option<PathBuf> {
+    std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .map(PathBuf::from)
+        .ok()
+}
 
 /// 本地配置（保存在可执行程序同目录下的 config.yaml）
 /// 存储数据目录路径等本地设施配置。只在修改默认值时创建此文件。
@@ -72,8 +79,8 @@ fn get_data_dir_path() -> PathBuf {
     let local = load_local_config();
     if let Some(dir) = &local.custom_data_dir {
         PathBuf::from(dir)
-    } else if let Some(base_dirs) = BaseDirs::new() {
-        base_dirs.home_dir().join(".atomcode-switch")
+    } else if let Some(home) = home_dir() {
+        home.join(".atomcode-switch")
     } else {
         PathBuf::from(".atomcode-switch")
     }
@@ -86,8 +93,8 @@ fn get_accounts_file_path() -> PathBuf {
 
 /// 从旧位置迁移数据（~/.atomcode-switch/config.yaml → atomcode-accounts.yaml）
 fn migrate_old_config_if_needed() {
-    let old_path = if let Some(base_dirs) = BaseDirs::new() {
-        base_dirs.home_dir().join(".atomcode-switch").join("config.yaml")
+    let old_path = if let Some(home) = home_dir() {
+        home.join(".atomcode-switch").join("config.yaml")
     } else {
         return;
     };

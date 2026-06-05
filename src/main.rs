@@ -5,36 +5,11 @@ mod models;
 
 use app::AtomcodeSwitchApp;
 use eframe::egui;
-use std::sync::Arc;
-
-fn load_icon() -> Option<egui::IconData> {
-    let icon_path = std::path::Path::new("icon.png");
-    if !icon_path.exists() {
-        return None;
-    }
-
-    let img = image::open(icon_path).ok()?;
-    let img = img.resize(256, 256, image::imageops::FilterType::Lanczos3);
-    let rgba = img.to_rgba8();
-    let (width, height) = rgba.dimensions();
-
-    Some(egui::IconData {
-        rgba: rgba.into_raw(),
-        width,
-        height,
-    })
-}
 
 fn main() -> eframe::Result<()> {
-    let icon_data = load_icon();
-
-    let mut viewport = egui::ViewportBuilder::default()
+    let viewport = egui::ViewportBuilder::default()
         .with_inner_size([780.0, 560.0])
         .with_min_inner_size([600.0, 400.0]);
-
-    if let Some(icon) = icon_data {
-        viewport = viewport.with_icon(Arc::new(icon));
-    }
 
     let options = eframe::NativeOptions {
         viewport,
