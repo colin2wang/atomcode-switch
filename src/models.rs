@@ -21,7 +21,7 @@ pub struct User {
     pub avatar_url: String,
 }
 
-// --- 本地 config.yaml 对应的数据结构 ---
+// --- atomcode-accounts.yaml 对应的数据结构 ---
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {

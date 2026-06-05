@@ -2,6 +2,24 @@ use crate::models::{AppConfig, ManagedAccount};
 use crate::{atomcode_io, config_io};
 use eframe::egui;
 
+// ============ GitHub CSS 颜色常量 ============
+const GITHUB_BG: egui::Color32 = egui::Color32::from_rgb(246, 248, 250);     // #f6f8fa -> 稍浅
+const _GITHUB_CARD: egui::Color32 = egui::Color32::WHITE;                     // #ffffff
+const GITHUB_BORDER: egui::Color32 = egui::Color32::from_rgb(208, 215, 222); // #d0d7de
+const GITHUB_TEXT_PRIMARY: egui::Color32 = egui::Color32::from_rgb(31, 35, 40);   // #24292f -> 稍暗
+const GITHUB_TEXT_SECONDARY: egui::Color32 = egui::Color32::from_rgb(101, 109, 118); // #6e7681
+const _GITHUB_TEXT_TERTIARY: egui::Color32 = GITHUB_TEXT_SECONDARY;
+const GITHUB_BLUE: egui::Color32 = egui::Color32::from_rgb(9, 105, 218);     // #0969da
+const GITHUB_GREEN: egui::Color32 = egui::Color32::from_rgb(45, 164, 78);    // #2da44e
+const GITHUB_RED: egui::Color32 = egui::Color32::from_rgb(207, 34, 46);      // #cf222e
+const GITHUB_YELLOW: egui::Color32 = egui::Color32::from_rgb(212, 167, 44);  // #d4a72c
+const _GITHUB_BTN_BG: egui::Color32 = egui::Color32::from_rgb(246, 248, 250); // #f6f8fa
+const _GITHUB_BTN_HOVER: egui::Color32 = egui::Color32::from_rgb(243, 244, 246); // #f3f4f6
+const GITHUB_AVATAR_INACTIVE: egui::Color32 = egui::Color32::from_rgb(175, 184, 193); // #afb8c1
+const GITHUB_PROGRESS_BG: egui::Color32 = egui::Color32::from_rgb(233, 236, 239);
+const _GITHUB_BLUE_HOVER: egui::Color32 = egui::Color32::from_rgb(8, 90, 186);
+const _GITHUB_GREEN_HOVER: egui::Color32 = egui::Color32::from_rgb(36, 146, 67);
+
 /// 主应用结构体
 pub struct AtomcodeSwitchApp {
     config: AppConfig,
@@ -13,7 +31,8 @@ pub struct AtomcodeSwitchApp {
 
 impl AtomcodeSwitchApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        // 设置中文字体
+        // 设置 GitHub 主题和中文字体
+        Self::setup_github_theme(&cc.egui_ctx);
         Self::setup_fonts(&cc.egui_ctx);
 
         let mut app = Self {
@@ -27,6 +46,117 @@ impl AtomcodeSwitchApp {
         // 启动时同步当前系统账号状态
         app.sync_active_account_status();
         app
+    }
+
+    /// GitHub CSS 风格主题
+    fn setup_github_theme(ctx: &egui::Context) {
+        let mut style = (*ctx.style()).clone();
+
+        // GitHub 颜色变量
+        let github_bg = egui::Color32::from_rgb(246, 248, 250);
+        let github_card = egui::Color32::from_rgb(255, 255, 255);
+        let github_border = egui::Color32::from_rgb(208, 215, 222);
+        let github_text_primary = egui::Color32::from_rgb(31, 35, 40);
+        let _github_text_secondary = egui::Color32::from_rgb(101, 109, 118);
+        let github_blue = egui::Color32::from_rgb(9, 105, 218);
+        let _github_blue_hover = egui::Color32::from_rgb(8, 90, 186);
+        let github_blue_active = egui::Color32::from_rgb(7, 78, 160);
+        let _github_green = egui::Color32::from_rgb(45, 164, 78);
+        let github_red = egui::Color32::from_rgb(207, 34, 46);
+        let github_yellow = egui::Color32::from_rgb(212, 167, 44);
+        let github_btn_bg = egui::Color32::from_rgb(246, 248, 250);
+        let github_btn_hover = egui::Color32::from_rgb(238, 242, 246);
+        let github_btn_active = egui::Color32::from_rgb(220, 226, 232);
+        let github_btn_text = egui::Color32::from_rgb(31, 35, 40);
+        let github_btn_border = egui::Color32::from_rgb(208, 215, 222);
+        let github_input_bg = egui::Color32::from_rgb(255, 255, 255);
+        let github_selection = egui::Color32::from_rgba_premultiplied(8, 138, 237, 40);
+
+        let rounding = egui::Rounding::same(6.0);
+
+        // Visuals
+        style.visuals = egui::Visuals {
+            dark_mode: false,
+            window_fill: github_card,
+            panel_fill: github_bg,
+            faint_bg_color: github_bg,
+            extreme_bg_color: github_card,
+            code_bg_color: egui::Color32::from_rgb(246, 248, 250),
+            warn_fg_color: github_yellow,
+            error_fg_color: github_red,
+            hyperlink_color: github_blue,
+            selection: egui::style::Selection {
+                bg_fill: github_selection,
+                stroke: egui::Stroke::NONE,
+            },
+            window_stroke: egui::Stroke::new(1.0, github_border),
+            window_rounding: egui::Rounding::same(8.0),
+            window_shadow: egui::epaint::Shadow {
+                offset: [0.0, 4.0].into(),
+                blur: 12.0,
+                spread: 0.0,
+                color: egui::Color32::from_black_alpha(24),
+            },
+            popup_shadow: egui::epaint::Shadow {
+                offset: [0.0, 8.0].into(),
+                blur: 24.0,
+                spread: 0.0,
+                color: egui::Color32::from_black_alpha(32),
+            },
+            widgets: egui::style::Widgets {
+                noninteractive: egui::style::WidgetVisuals {
+                    bg_fill: github_input_bg,
+                    weak_bg_fill: github_bg,
+                    bg_stroke: egui::Stroke::new(1.0, github_border),
+                    rounding,
+                    fg_stroke: egui::Stroke::new(1.0, github_text_primary),
+                    expansion: 0.0,
+                },
+                inactive: egui::style::WidgetVisuals {
+                    bg_fill: github_btn_bg,
+                    weak_bg_fill: github_btn_bg,
+                    bg_stroke: egui::Stroke::new(1.0, github_btn_border),
+                    rounding,
+                    fg_stroke: egui::Stroke::new(1.0, github_btn_text),
+                    expansion: 0.0,
+                },
+                hovered: egui::style::WidgetVisuals {
+                    bg_fill: github_btn_hover,
+                    weak_bg_fill: github_btn_hover,
+                    bg_stroke: egui::Stroke::new(1.0, github_blue),
+                    rounding,
+                    fg_stroke: egui::Stroke::new(1.5, github_blue),
+                    expansion: 1.0,
+                },
+                active: egui::style::WidgetVisuals {
+                    bg_fill: github_btn_active,
+                    weak_bg_fill: github_btn_active,
+                    bg_stroke: egui::Stroke::new(1.0, github_blue_active),
+                    rounding,
+                    fg_stroke: egui::Stroke::new(2.0, github_blue_active),
+                    expansion: 1.0,
+                },
+                open: egui::style::WidgetVisuals {
+                    bg_fill: github_btn_hover,
+                    weak_bg_fill: github_btn_hover,
+                    bg_stroke: egui::Stroke::new(1.0, github_blue),
+                    rounding,
+                    fg_stroke: egui::Stroke::new(1.5, github_blue),
+                    expansion: 0.0,
+                },
+            },
+            slider_trailing_fill: true,
+            striped: false,
+            ..style.visuals
+        };
+
+        style.spacing.item_spacing = egui::vec2(8.0, 6.0);
+        style.spacing.button_padding = egui::vec2(12.0, 5.0);
+        style.spacing.indent = 16.0;
+        style.spacing.menu_margin = egui::Margin::symmetric(16.0, 12.0);
+        style.spacing.window_margin = egui::Margin::same(8.0);
+
+        ctx.set_style(style);
     }
 
     /// 设置中文字体支持
@@ -60,10 +190,11 @@ impl AtomcodeSwitchApp {
         ctx.set_fonts(fonts);
     }
 
-    /// 加载系统中文字体
+    /// 加载系统中文字体（优先微软雅黑）
     fn load_chinese_font() -> Option<Vec<u8>> {
         // 按优先级尝试加载中文字体
         let font_paths = [
+            // Windows 微软雅黑（首选）
             "/usr/share/fonts/truetype/chinese/NotoSansSC[wght].ttf",
             "/usr/share/fonts/truetype/chinese/SarasaMonoSC-Regular.ttf",
             "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
@@ -236,22 +367,22 @@ impl AtomcodeSwitchApp {
     /// 获取用量百分比对应的颜色
     fn usage_color(percent: f32) -> egui::Color32 {
         if percent < 50.0 {
-            egui::Color32::from_rgb(40, 167, 69) // 绿色
+            GITHUB_GREEN // 绿色
         } else if percent < 80.0 {
-            egui::Color32::from_rgb(255, 193, 7) // 黄色
+            GITHUB_YELLOW // 黄色
         } else {
-            egui::Color32::from_rgb(220, 53, 69) // 红色
+            GITHUB_RED // 红色
         }
     }
 
     /// 获取进度条填充颜色
     fn progress_bar_color(percent: f32) -> egui::Color32 {
         if percent < 50.0 {
-            egui::Color32::from_rgb(13, 110, 253) // 蓝色
+            GITHUB_BLUE // 蓝色
         } else if percent < 80.0 {
-            egui::Color32::from_rgb(255, 193, 7) // 黄色
+            GITHUB_YELLOW // 黄色
         } else {
-            egui::Color32::from_rgb(220, 53, 69) // 红色
+            GITHUB_RED // 红色
         }
     }
 }
@@ -274,7 +405,7 @@ impl eframe::App for AtomcodeSwitchApp {
                     ui.label(
                         egui::RichText::new(&self.status_message)
                             .size(12.0)
-                            .color(egui::Color32::from_rgb(108, 117, 125)),
+                            .color(GITHUB_TEXT_SECONDARY),
                     );
 
                     // 右侧按钮组（右对齐）
@@ -332,7 +463,7 @@ impl eframe::App for AtomcodeSwitchApp {
                     ui.label(
                         egui::RichText::new(format!("{} 个账户", count))
                             .size(12.0)
-                            .color(egui::Color32::from_rgb(108, 117, 125)),
+                            .color(GITHUB_TEXT_SECONDARY),
                     );
 
                     // 状态指示
@@ -349,18 +480,18 @@ impl eframe::App for AtomcodeSwitchApp {
                         egui::RichText::new("\u{25CF}")
                             .size(10.0)
                             .color(if active_valid {
-                                egui::Color32::from_rgb(40, 167, 69)
+                                GITHUB_GREEN
                             } else {
-                                egui::Color32::from_rgb(220, 53, 69)
+                                GITHUB_RED
                             }),
                     );
                     ui.label(
                         egui::RichText::new(if active_valid { "正常" } else { "异常" })
                             .size(12.0)
                             .color(if active_valid {
-                                egui::Color32::from_rgb(40, 167, 69)
+                                GITHUB_GREEN
                             } else {
-                                egui::Color32::from_rgb(220, 53, 69)
+                                GITHUB_RED
                             }),
                     );
 
@@ -415,7 +546,7 @@ impl eframe::App for AtomcodeSwitchApp {
                         ui.label(
                             egui::RichText::new(&self.status_message)
                                 .size(12.0)
-                                .color(egui::Color32::from_rgb(108, 117, 125)),
+                                .color(GITHUB_TEXT_SECONDARY),
                         );
                     });
                 });
@@ -445,7 +576,7 @@ impl eframe::App for AtomcodeSwitchApp {
                         ui.label(
                             egui::RichText::new("自定义 auth.toml 保存目录（默认为 ~/.atomcode）")
                                 .size(12.0)
-                                .color(egui::Color32::from_rgb(108, 117, 125)),
+                                .color(GITHUB_TEXT_SECONDARY),
                         );
                         ui.add_space(4.0);
 
@@ -512,7 +643,7 @@ impl eframe::App for AtomcodeSwitchApp {
         // ============ 中央内容区 ============
         egui::CentralPanel::default().show(ctx, |ui| {
             // 设置背景色
-            let bg_color = egui::Color32::from_rgb(248, 249, 250);
+            let bg_color = GITHUB_BG;
             ui.painter().rect_filled(ui.max_rect(), 0.0, bg_color);
 
             egui::ScrollArea::vertical()
@@ -531,18 +662,18 @@ impl eframe::App for AtomcodeSwitchApp {
                                         ui.label(
                                             egui::RichText::new("\u{25CF}")
                                                 .size(14.0)
-                                                .color(egui::Color32::from_rgb(40, 167, 69)),
+                                                .color(GITHUB_GREEN),
                                         );
                                         ui.label(
                                             egui::RichText::new(&active_acc.auth_data.user.name)
                                                 .size(15.0)
-                                                .color(egui::Color32::from_rgb(33, 37, 41))
+                                                .color(GITHUB_TEXT_PRIMARY)
                                                 .strong(),
                                         );
                                         ui.label(
                                             egui::RichText::new("\u{00B7} 当前使用中")
                                                 .size(13.0)
-                                                .color(egui::Color32::from_rgb(108, 117, 125)),
+                                                .color(GITHUB_TEXT_SECONDARY),
                                         );
                                     });
                                     ui.add_space(8.0);
@@ -563,9 +694,9 @@ impl eframe::App for AtomcodeSwitchApp {
                                     .stroke(egui::Stroke::new(
                                         1.0,
                                         if is_active {
-                                            egui::Color32::from_rgb(13, 110, 253)
+                                            GITHUB_BLUE
                                         } else {
-                                            egui::Color32::from_rgb(222, 226, 230)
+                                            GITHUB_BORDER
                                         },
                                     ))
                                     .inner_margin(egui::Margin::symmetric(20.0, 16.0))
@@ -579,9 +710,9 @@ impl eframe::App for AtomcodeSwitchApp {
                                                 egui::Sense::hover(),
                                             );
                                             let avatar_color = if is_active {
-                                                egui::Color32::from_rgb(13, 110, 253)
+                                                GITHUB_BLUE
                                             } else {
-                                                egui::Color32::from_rgb(206, 212, 218)
+                                                GITHUB_AVATAR_INACTIVE
                                             };
                                             ui.painter().circle_filled(
                                                 rect.center(),
@@ -714,7 +845,7 @@ impl eframe::App for AtomcodeSwitchApp {
                                                     acc.plan_name
                                                 ))
                                                 .size(13.0)
-                                                .color(egui::Color32::from_rgb(33, 37, 41))
+                                                .color(GITHUB_TEXT_PRIMARY)
                                                 .strong(),
                                             );
                                             ui.with_layout(
@@ -784,7 +915,7 @@ impl eframe::App for AtomcodeSwitchApp {
                                         ui.painter().rect_filled(
                                             bar_rect,
                                             4.0,
-                                            egui::Color32::from_rgb(233, 236, 239),
+                                            GITHUB_PROGRESS_BG,
                                         );
 
                                         // 填充条
@@ -814,7 +945,7 @@ impl eframe::App for AtomcodeSwitchApp {
                                                     acc.reset_time
                                                 ))
                                                 .size(11.0)
-                                                .color(egui::Color32::from_rgb(108, 117, 125)),
+                                                .color(GITHUB_TEXT_SECONDARY),
                                             );
                                             ui.with_layout(
                                                 egui::Layout::right_to_left(
@@ -849,13 +980,13 @@ impl eframe::App for AtomcodeSwitchApp {
                                     ui.label(
                                         egui::RichText::new("暂无账号")
                                             .size(18.0)
-                                            .color(egui::Color32::from_rgb(108, 117, 125)),
+                                            .color(GITHUB_TEXT_SECONDARY),
                                     );
                                     ui.add_space(8.0);
                                     ui.label(
                                         egui::RichText::new("点击顶部 \"导入\" 按钮添加当前系统账号")
                                             .size(13.0)
-                                            .color(egui::Color32::from_rgb(108, 117, 125)),
+                                            .color(GITHUB_TEXT_SECONDARY),
                                     );
                                     ui.add_space(16.0);
                                     let import_btn = ui.add(
@@ -865,7 +996,7 @@ impl eframe::App for AtomcodeSwitchApp {
                                                 .color(egui::Color32::WHITE),
                                         )
                                         .rounding(6.0)
-                                        .fill(egui::Color32::from_rgb(13, 110, 253)),
+                                        .fill(GITHUB_BLUE),
                                     );
                                     if import_btn.clicked() {
                                         self.import_current_auth();
@@ -907,7 +1038,7 @@ impl eframe::App for AtomcodeSwitchApp {
                                     egui::Button::new(
                                         egui::RichText::new("删除").size(13.0).color(egui::Color32::WHITE),
                                     )
-                                    .fill(egui::Color32::from_rgb(220, 53, 69)),
+                                    .fill(GITHUB_RED),
                                 )
                                 .clicked()
                             {

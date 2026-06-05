@@ -19,8 +19,11 @@ A desktop GUI tool for managing multiple AtomCode accounts and switching between
 
 | File | Path | Purpose |
 |------|------|---------|
-| App Config | `~/.atomcode-switch/config.yaml` | Stores managed accounts, active account ID, auto-switch rules, custom directory path |
+| Local Config | `<exe_dir>/config.yaml` | Stores custom data directory path (only created when non-default values are set) |
+| Account Data | `<data_dir>/atomcode-accounts.yaml` | Stores managed accounts, active account ID, auto-switch rules, custom auth.toml directory path |
 | Auth Data | `~/.atomcode/auth.toml` | AtomCode authentication token file (this is what the tool reads/writes to switch accounts) |
+
+> Default `<data_dir>` is `~/.atomcode-switch`. You can customize it via the settings panel.
 
 ## Installation
 
