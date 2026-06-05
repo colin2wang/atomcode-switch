@@ -43,6 +43,30 @@ fn load_local_config() -> LocalConfig {
     }
 }
 
+/// 保存本地配置
+fn save_local_config(config: &LocalConfig) {
+    let path = get_local_config_path();
+    if config.custom_data_dir.is_some() {
+        if let Ok(content) = serde_yaml::to_string(config) {
+            let _ = fs::write(&path, content);
+        }
+    } else {
+        let _ = fs::remove_file(&path);
+    }
+}
+
+/// 获取当前自定义数据目录
+pub fn get_custom_data_dir() -> Option<String> {
+    load_local_config().custom_data_dir
+}
+
+/// 设置自定义数据目录
+pub fn set_custom_data_dir(dir: Option<String>) {
+    let mut local = load_local_config();
+    local.custom_data_dir = dir;
+    save_local_config(&local);
+}
+
 /// 获取数据目录路径
 fn get_data_dir_path() -> PathBuf {
     let local = load_local_config();

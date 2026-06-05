@@ -20,9 +20,18 @@ const GITHUB_PROGRESS_BG: egui::Color32 = egui::Color32::from_rgb(233, 236, 239)
 const _GITHUB_BLUE_HOVER: egui::Color32 = egui::Color32::from_rgb(8, 90, 186);
 const _GITHUB_GREEN_HOVER: egui::Color32 = egui::Color32::from_rgb(36, 146, 67);
 
+/// 设置对话框的临时状态
+struct SettingsState {
+    data_dir: String,
+    atomcode_dir: String,
+    auto_switch_enabled: bool,
+    max_usage_percent: f32,
+}
+
 /// 主应用结构体
 pub struct AtomcodeSwitchApp {
     config: AppConfig,
+    settings_state: Option<SettingsState>,
     status_message: String,
     show_settings: bool,
     delete_confirm_id: Option<String>,
@@ -37,6 +46,7 @@ impl AtomcodeSwitchApp {
 
         let mut app = Self {
             config: config_io::load_config(),
+            settings_state: None,
             status_message: "就绪".to_string(),
             show_settings: false,
             delete_confirm_id: None,
@@ -555,89 +565,147 @@ impl eframe::App for AtomcodeSwitchApp {
 
         // ============ 设置面板（浮动窗口） ============
         if self.show_settings {
+            // 初始化设置状态（首次打开时）
+            if self.settings_state.is_none() {
+                self.settings_state = Some(SettingsState {
+                    data_dir: config_io::get_custom_data_dir().unwrap_or_default(),
+                    atomcode_dir: self.config.custom_atomcode_dir.clone().unwrap_or_default(),
+                    auto_switch_enabled: self.config.auto_switch_rules.enabled,
+                    max_usage_percent: self.config.auto_switch_rules.max_usage_percent,
+                });
+            }
+
             let mut show_settings = true;
+            let mut save_settings = false;
+            let mut cancel_settings = false;
+
             egui::Window::new("\u{2699} 设置")
                 .open(&mut show_settings)
                 .resizable(false)
                 .collapsible(false)
                 .default_pos([200.0, 150.0])
-                .default_size([400.0, 300.0])
+                .default_size([420.0, 280.0])
                 .show(ctx, |ui| {
                     ui.add_space(8.0);
 
-                    // 自定义目录设置
-                    ui.group(|ui| {
+                    if let Some(ref mut state) = self.settings_state {
+                        // 导出目录
+                        ui.label(
+                            egui::RichText::new("导出目录")
+                                .size(14.0)
+                                .strong(),
+                        );
+                        ui.label(
+                            egui::RichText::new("自定义账号数据存储目录（默认为 ~/.atomcode-switch）")
+                                .size(12.0)
+                                .color(GITHUB_TEXT_SECONDARY),
+                        );
+                        ui.add_space(4.0);
+                        ui.horizontal(|ui| {
+                            ui.add(
+                                egui::TextEdit::singleline(&mut state.data_dir)
+                                    .desired_width(300.0)
+                                    .hint_text("默认: ~/.atomcode-switch"),
+                            );
+                            if ui.button("浏览…").clicked() {
+                                if let Some(path) = rfd::FileDialog::new().pick_folder() {
+                                    state.data_dir = path.to_string_lossy().to_string();
+                                }
+                            }
+                        });
+
+                        ui.add_space(12.0);
+
+                        // Atomcode 目录
                         ui.label(
                             egui::RichText::new("Atomcode 目录")
                                 .size(14.0)
                                 .strong(),
                         );
-                        ui.add_space(4.0);
                         ui.label(
                             egui::RichText::new("自定义 auth.toml 保存目录（默认为 ~/.atomcode）")
                                 .size(12.0)
                                 .color(GITHUB_TEXT_SECONDARY),
                         );
                         ui.add_space(4.0);
-
-                        let mut dir = self
-                            .config
-                            .custom_atomcode_dir
-                            .clone()
-                            .unwrap_or_default();
                         ui.horizontal(|ui| {
-                            let resp = ui.add(
-                                egui::TextEdit::singleline(&mut dir)
-                                    .desired_width(280.0)
+                            ui.add(
+                                egui::TextEdit::singleline(&mut state.atomcode_dir)
+                                    .desired_width(300.0)
                                     .hint_text("默认: ~/.atomcode"),
                             );
-                            if resp.changed() {
-                                self.config.custom_atomcode_dir =
-                                    if dir.is_empty() { None } else { Some(dir) };
-                                config_io::save_config(&self.config);
+                            if ui.button("浏览…").clicked() {
+                                if let Some(path) = rfd::FileDialog::new().pick_folder() {
+                                    state.atomcode_dir = path.to_string_lossy().to_string();
+                                }
                             }
                         });
-                    });
 
-                    ui.add_space(12.0);
+                        ui.add_space(12.0);
 
-                    // 自动切换规则
-                    ui.group(|ui| {
+                        // 自动切换规则
                         ui.label(
                             egui::RichText::new("自动切换规则")
                                 .size(14.0)
                                 .strong(),
                         );
                         ui.add_space(4.0);
-
-                        let mut enabled = self.config.auto_switch_rules.enabled;
-                        if ui
-                            .checkbox(&mut enabled, "启用自动切换")
-                            .changed()
-                        {
-                            self.config.auto_switch_rules.enabled = enabled;
-                            config_io::save_config(&self.config);
-                        }
-
+                        ui.checkbox(&mut state.auto_switch_enabled, "启用自动切换");
                         ui.add_space(4.0);
                         ui.horizontal(|ui| {
                             ui.label("用量超过");
-                            let mut threshold = self.config.auto_switch_rules.max_usage_percent;
-                            let resp = ui.add(
-                                egui::DragValue::new(&mut threshold)
+                            ui.add(
+                                egui::DragValue::new(&mut state.max_usage_percent)
                                     .clamp_range(50.0..=100.0)
                                     .suffix("%")
                                     .speed(0.5),
                             );
-                            if resp.changed() {
-                                self.config.auto_switch_rules.max_usage_percent = threshold;
-                                config_io::save_config(&self.config);
-                            }
                             ui.label("时自动切换至用量最低的账号");
                         });
-                    });
+
+                        ui.add_space(16.0);
+
+                        // 底部按钮
+                        ui.horizontal(|ui| {
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                if ui.button("确定").clicked() {
+                                    save_settings = true;
+                                }
+                                if ui.button("取消").clicked() {
+                                    cancel_settings = true;
+                                }
+                            });
+                        });
+                    }
                 });
-            self.show_settings = show_settings;
+
+            if save_settings {
+                if let Some(ref state) = self.settings_state {
+                    // 保存导出目录
+                    config_io::set_custom_data_dir(
+                        if state.data_dir.is_empty() { None } else { Some(state.data_dir.clone()) }
+                    );
+                    // 保存 Atomcode 目录
+                    self.config.custom_atomcode_dir =
+                        if state.atomcode_dir.is_empty() { None } else { Some(state.atomcode_dir.clone()) };
+                    // 保存自动切换规则
+                    self.config.auto_switch_rules.enabled = state.auto_switch_enabled;
+                    self.config.auto_switch_rules.max_usage_percent = state.max_usage_percent;
+                    // 保存配置
+                    config_io::save_config(&self.config);
+                    self.status_message = "设置已保存".to_string();
+                }
+                self.settings_state = None;
+                self.show_settings = false;
+            } else if cancel_settings {
+                self.settings_state = None;
+                self.show_settings = false;
+            } else {
+                self.show_settings = show_settings;
+                if !show_settings {
+                    self.settings_state = None;
+                }
+            }
         }
 
         // ============ 中央内容区 ============
