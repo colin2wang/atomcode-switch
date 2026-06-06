@@ -32,7 +32,7 @@ A desktop GUI tool for managing multiple AtomCode accounts and switching between
 ### Build from Source
 
 ```bash
-git clone https://github.com/your-username/atomcode-switch.git
+git clone https://github.com/colin2wang/atomcode-switch.git
 cd atomcode-switch
 cargo build --release
 ```
