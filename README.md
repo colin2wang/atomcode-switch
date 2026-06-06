@@ -2,10 +2,6 @@
 
 A desktop GUI tool for managing multiple AtomCode accounts and switching between them with ease.
 
-![Screenshot](screenshot.png)
-
-> **Note**: `screenshot.png` is not included in this repository. Replace with an actual screenshot or remove the line above.
-
 ## Features
 
 - **Multi-Account Management** – Import, view, and manage multiple AtomCode accounts in one place.
