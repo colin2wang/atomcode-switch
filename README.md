@@ -14,6 +14,7 @@ A desktop GUI tool for managing multiple AtomCode accounts and switching between
 - **Auto-Switch Rules** – Set a usage threshold. When the active account exceeds it, the tool automatically switches to the lowest-usage valid account.
 - **Custom AtomCode Directory** – Supports custom `auth.toml` storage locations (useful for WSL or non-default setups).
 - **Imported-Account Persistence** – Account data (including `auth.toml` content, usage stats, and plan info) is stored locally in a config file.
+- **Slim Binary** – Optimized release build with minimal dependencies and LTO, producing a small executable.
 
 ## Configuration Files
 
@@ -48,8 +49,6 @@ The binary will be at `target/release/atomcode-switch.exe` (Windows) or `target/
 cargo run --release
 ```
 
-For a better experience, place an `icon.png` (256×256 recommended) next to the binary to set the window icon.
-
 ## Usage Guide
 
 ### Importing an Account
@@ -81,9 +80,11 @@ If your AtomCode `auth.toml` is stored in a non-default location (e.g., inside a
 
 ## Tech Stack
 
-- **GUI**: [egui](https://github.com/emilk/egui) 0.27 / [eframe](https://github.com/emilk/egui/tree/master/eframe)
+- **GUI**: [egui](https://github.com/emilk/egui) 0.27 / [eframe](https://github.com/emilk/egui/tree/master/eframe) (wgpu backend)
 - **Serialization**: serde, serde_yaml, toml
-- **Assets**: rfd (file dialogs), image (icon loading), uuid, chrono, directories
+- **Dialogs**: tinyfiledialogs
+- **Icon**: ico (embedded via build script)
+- **Build**: embed-resource (Windows .exe icon embedding)
 
 ## License
 

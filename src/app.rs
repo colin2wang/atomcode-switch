@@ -525,11 +525,11 @@ impl eframe::App for AtomcodeSwitchApp {
                         .clicked()
                     {
                         if let Ok(content) = serde_yaml::to_string(&self.config) {
-                            if let Some(path) = rfd::FileDialog::new()
-                                .set_file_name("config.yaml")
-                                .save_file()
-                            {
-                                let _ = std::fs::write(path, content);
+                            if let Some(path) = tinyfiledialogs::save_file_dialog(
+                                "导出配置",
+                                "config.yaml",
+                            ) {
+                                let _ = std::fs::write(&path, content);
                                 self.status_message = "导出成功".to_string();
                             }
                         }
@@ -615,8 +615,11 @@ impl eframe::App for AtomcodeSwitchApp {
                                     .hint_text("默认: ~/.atomcode-switch"),
                             );
                             if ui.button("浏览…").clicked() {
-                                if let Some(path) = rfd::FileDialog::new().pick_folder() {
-                                    state.data_dir = path.to_string_lossy().to_string();
+                                if let Some(path) = tinyfiledialogs::select_folder_dialog(
+                                    "选择数据目录",
+                                    &state.data_dir,
+                                ) {
+                                    state.data_dir = path;
                                 }
                             }
                         });
@@ -642,8 +645,11 @@ impl eframe::App for AtomcodeSwitchApp {
                                     .hint_text("默认: ~/.atomcode"),
                             );
                             if ui.button("浏览…").clicked() {
-                                if let Some(path) = rfd::FileDialog::new().pick_folder() {
-                                    state.atomcode_dir = path.to_string_lossy().to_string();
+                                if let Some(path) = tinyfiledialogs::select_folder_dialog(
+                                    "选择 Atomcode 目录",
+                                    &state.atomcode_dir,
+                                ) {
+                                    state.atomcode_dir = path;
                                 }
                             }
                         });
