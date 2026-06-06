@@ -678,11 +678,87 @@ impl eframe::App for AtomcodeSwitchApp {
                                     .hint_text("默认: ~/.atomcode-switch"),
                             );
                             if ui.button("浏览…").clicked() {
-                                if let Some(path) = tinyfiledialogs::select_folder_dialog(
+                                if let Some(dir) = tinyfiledialogs::select_folder_dialog(
                                     "选择数据目录",
                                     &state.data_dir,
                                 ) {
-                                    state.data_dir = path;
+                                    // 检查目标目录是否已有 atomcode-accounts.yaml
+                                    let accounts_path = std::path::Path::new(&dir)
+                                        .join("atomcode-accounts.yaml");
+                                    if accounts_path.exists() {
+                                        // 读取现有文件中的账号
+                                        let existing_accounts = std::fs::read_to_string(&accounts_path)
+                                            .ok()
+                                            .and_then(|c| serde_yaml::from_str::<AppConfig>(&c).ok())
+                                            .map(|c| c.accounts)
+                                            .unwrap_or_default();
+
+                                        let existing_names: Vec<String> = existing_accounts
+                                            .iter()
+                                            .map(|a| {
+                                                format!(
+                                                    "  - {}（{}）",
+                                                    a.auth_data.user.name, a.auth_data.user.username
+                                                )
+                                            })
+                                            .collect();
+                                        let current_names: Vec<String> = self
+                                            .config
+                                            .accounts
+                                            .iter()
+                                            .map(|a| {
+                                                format!(
+                                                    "  - {}（{}）",
+                                                    a.auth_data.user.name, a.auth_data.user.username
+                                                )
+                                            })
+                                            .collect();
+
+                                        let msg = format!(
+                                            "目标目录已有 {} 个账号：\n{}\n\n当前程序有 {} 个账号：\n{}\n\n是否用目标目录的账号替换当前账号？",
+                                            existing_accounts.len(),
+                                            if existing_names.is_empty() {
+                                                "  （无）".to_string()
+                                            } else {
+                                                existing_names.join("\n")
+                                            },
+                                            self.config.accounts.len(),
+                                            if current_names.is_empty() {
+                                                "  （无）".to_string()
+                                            } else {
+                                                current_names.join("\n")
+                                            },
+                                        );
+
+                                        let should_import = matches!(
+                                            tinyfiledialogs::message_box_yes_no(
+                                                "切换导出目录",
+                                                &msg,
+                                                tinyfiledialogs::MessageBoxIcon::Question,
+                                                tinyfiledialogs::YesNo::No,
+                                            ),
+                                            tinyfiledialogs::YesNo::Yes
+                                        );
+
+                                        if should_import {
+                                            // 读取文件内容导入账号
+                                            if let Some(config) = std::fs::read_to_string(&accounts_path)
+                                                .ok()
+                                                .and_then(|c| serde_yaml::from_str::<AppConfig>(&c).ok())
+                                            {
+                                                self.config.accounts = config.accounts;
+                                                self.config.active_account_id = config.active_account_id;
+                                                self.config.auto_switch_rules = config.auto_switch_rules;
+                                                self.status_message = format!(
+                                                    "已导入 {} 个账号",
+                                                    self.config.accounts.len()
+                                                );
+                                            }
+                                        } else {
+                                            self.status_message = "已保留当前账号".to_string();
+                                        }
+                                    }
+                                    state.data_dir = dir;
                                 }
                             }
                         });
