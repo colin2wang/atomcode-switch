@@ -37,7 +37,7 @@ fn main() -> eframe::Result<()> {
     };
 
     eframe::run_native(
-        "AtomCode Switch",
+        &format!("AtomCode Switch v{}", env!("CARGO_PKG_VERSION")),
         options,
         Box::new(|cc| Box::new(AtomcodeSwitchApp::new(cc))),
     )?;

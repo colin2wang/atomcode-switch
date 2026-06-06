@@ -2,6 +2,10 @@
 
 A desktop GUI tool for managing multiple AtomCode accounts and switching between them with ease.
 
+## Links
+
+[Change History](CHANGE_HISTORY.md) | 
+
 ## Features
 
 - **Multi-Account Management** – Import, view, and manage multiple AtomCode accounts in one place.

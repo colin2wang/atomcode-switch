@@ -524,13 +524,76 @@ impl eframe::App for AtomcodeSwitchApp {
                         )
                         .clicked()
                     {
-                        if let Ok(content) = serde_yaml::to_string(&self.config) {
-                            if let Some(path) = tinyfiledialogs::save_file_dialog(
-                                "导出配置",
-                                "config.yaml",
-                            ) {
-                                let _ = std::fs::write(&path, content);
-                                self.status_message = "导出成功".to_string();
+                        if let Some(path_str) = tinyfiledialogs::save_file_dialog(
+                            "导出配置",
+                            "config.yaml",
+                        ) {
+                            let path = std::path::Path::new(&path_str);
+                            let should_overwrite = if path.exists() {
+                                // 读取现有文件中的账号
+                                let existing_accounts = std::fs::read_to_string(path)
+                                    .ok()
+                                    .and_then(|c| serde_yaml::from_str::<AppConfig>(&c).ok())
+                                    .map(|c| c.accounts)
+                                    .unwrap_or_default();
+
+                                let existing_names: Vec<String> = existing_accounts
+                                    .iter()
+                                    .map(|a| {
+                                        format!(
+                                            "  - {}（{}）",
+                                            a.auth_data.user.name, a.auth_data.user.username
+                                        )
+                                    })
+                                    .collect();
+                                let new_names: Vec<String> = self
+                                    .config
+                                    .accounts
+                                    .iter()
+                                    .map(|a| {
+                                        format!(
+                                            "  - {}（{}）",
+                                            a.auth_data.user.name, a.auth_data.user.username
+                                        )
+                                    })
+                                    .collect();
+
+                                let msg = format!(
+                                    "目标文件已有 {} 个账号：\n{}\n\n即将导出 {} 个账号：\n{}\n\n是否覆盖？",
+                                    existing_accounts.len(),
+                                    if existing_names.is_empty() {
+                                        "  （无）".to_string()
+                                    } else {
+                                        existing_names.join("\n")
+                                    },
+                                    self.config.accounts.len(),
+                                    if new_names.is_empty() {
+                                        "  （无）".to_string()
+                                    } else {
+                                        new_names.join("\n")
+                                    },
+                                );
+
+                                matches!(
+                                    tinyfiledialogs::message_box_yes_no(
+                                        "导出冲突",
+                                        &msg,
+                                        tinyfiledialogs::MessageBoxIcon::Question,
+                                        tinyfiledialogs::YesNo::No,
+                                    ),
+                                    tinyfiledialogs::YesNo::Yes
+                                )
+                            } else {
+                                true
+                            };
+
+                            if should_overwrite {
+                                if let Ok(content) = serde_yaml::to_string(&self.config) {
+                                    let _ = std::fs::write(path, content);
+                                    self.status_message = "导出成功".to_string();
+                                }
+                            } else {
+                                self.status_message = "已保留原文件".to_string();
                             }
                         }
                     }
