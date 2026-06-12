@@ -1,5 +1,22 @@
 # Change History
 
+## v0.1.4 (2026-06-12)
+
+### Added
+- **Internationalization (i18n) Support** — Users can now switch between Chinese and English via a toolbar button (中/EN). All UI labels, buttons, status messages, and dialog titles are translated instantly.
+- **`lang/` Module** — New `src/lang.rs` + `src/lang/zh_cn.rs` + `src/lang/en_us.rs`. Each language is a standalone `.rs` file with a `pub fn get(key) -> &str` match function. Adding a new language requires only creating a new file and registering it in `lang.rs`.
+- **`i18n.rs` Module** — `I18n` struct using a function-pointer-based lookup (`fn(&str) -> &str`), with `t0`–`t4` helpers for parameterized strings with `{0}` `{1}` placeholders.
+- **Language Persistence** — Language choice is saved to `atomcode-accounts.yaml` (`language` field in `AppConfig`) and restored on next launch.
+
+### Changed
+- **All user-facing strings externalized** — Previously hardcoded Chinese/English strings in `ui.rs`, `account_ops.rs`, and `fetch_info.rs` replaced with `self.i18n.t0/t1/t3/t4()` calls.
+- **`format_reset_countdown` converted to method** — Now uses `self.i18n` to produce localized countdown text (e.g., `重置: 21:04（还有 23 小时 35 分 59 秒）` vs `Reset: 21:04 (in 23h 35m 59s)`).
+- **`AppConfig` now includes `language` field** — Serialized as `language: "zh_cn"` or `"en_us"` with serde default for backward compatibility.
+- **"解析并更新" button now disabled when empty** — Prevents accidental click with no input.
+
+### Removed
+- **YAML-based translation files** — `languages/i18n.yaml.zh_cn` and `languages/i18n.yaml.en_us` deleted in favor of native `.rs` files.
+
 ## v0.1.3 (2026-06-12)
 
 ### Added

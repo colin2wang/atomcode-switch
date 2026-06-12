@@ -5,6 +5,8 @@
 //! - [`account_ops`] — 账号 CRUD、自动切换、/login 解析
 //! - [`ui`] — 所有 UI 渲染（update、面板、对话框）
 
+use crate::i18n::I18n;
+use crate::lang::Language;
 use crate::{config_io, models::AppConfig};
 
 /// 设置对话框的临时状态
@@ -18,6 +20,7 @@ pub struct SettingsState {
 /// 主应用结构体
 pub struct AtomcodeSwitchApp {
     pub config: AppConfig,
+    pub i18n: I18n,
     pub settings_state: Option<SettingsState>,
     pub status_message: String,
     pub show_settings: bool,
@@ -34,10 +37,15 @@ impl AtomcodeSwitchApp {
         crate::theme::setup_github_theme(&cc.egui_ctx);
         crate::theme::setup_fonts(&cc.egui_ctx);
 
+        let config = config_io::load_config();
+        let lang = Language::from_str(&config.language);
+        let i18n = I18n::load(lang);
+
         let mut app = Self {
-            config: config_io::load_config(),
+            i18n,
+            config,
             settings_state: None,
-            status_message: "就绪".to_string(),
+            status_message: String::new(),
             show_settings: false,
             delete_confirm_id: None,
             last_auto_check: 0.0,
@@ -47,6 +55,7 @@ impl AtomcodeSwitchApp {
             auto_update_rx: None,
         };
 
+        app.status_message = app.i18n.t0("status_ready");
         app.sync_active_account_status();
         app
     }

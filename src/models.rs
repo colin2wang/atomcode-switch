@@ -33,6 +33,13 @@ pub struct AppConfig {
     pub accounts: Vec<ManagedAccount>,
     /// 自动切换规则设置
     pub auto_switch_rules: AutoSwitchRules,
+    /// 语言设置
+    #[serde(default = "default_language")]
+    pub language: String,
+}
+
+fn default_language() -> String {
+    "zh_cn".to_string()
 }
 
 impl Default for AppConfig {
@@ -45,6 +52,7 @@ impl Default for AppConfig {
                 enabled: false,
                 max_usage_percent: 95.0,
             },
+            language: default_language(),
         }
     }
 }

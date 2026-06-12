@@ -49,7 +49,7 @@ impl AtomcodeSwitchApp {
                         let id_to_switch = acc_to_switch.id.clone();
                         let name = acc_to_switch.auth_data.user.name.clone();
                         self.switch_to_account(&id_to_switch);
-                        self.status_message = format!("自动切换至账号: {}", name);
+                        self.status_message = self.i18n.t1("status_auto_switched", &name);
                     }
                 }
             }
@@ -63,10 +63,10 @@ impl AtomcodeSwitchApp {
                 Ok(_) => {
                     self.config.active_account_id = Some(id.to_string());
                     config_io::save_config(&self.config);
-                    self.status_message = format!("已切换至: {}", acc.auth_data.user.name);
+                    self.status_message = self.i18n.t1("status_switched", &acc.auth_data.user.name);
                 }
                 Err(e) => {
-                    self.status_message = format!("切换失败: {}", e);
+                    self.status_message = self.i18n.t1("status_switch_failed", &e);
                 }
             }
         }
@@ -96,9 +96,9 @@ impl AtomcodeSwitchApp {
 
             self.config.active_account_id = Some(id);
             config_io::save_config(&self.config);
-            self.status_message = format!("导入成功: {}", name);
+            self.status_message = self.i18n.t1("status_imported", &name);
         } else {
-            self.status_message = "未找到当前的 auth.toml 文件".to_string();
+            self.status_message = self.i18n.t0("status_auth_not_found");
         }
     }
 
@@ -113,7 +113,7 @@ impl AtomcodeSwitchApp {
             }
         }
         config_io::save_config(&self.config);
-        self.status_message = "账号已删除".to_string();
+        self.status_message = self.i18n.t0("status_account_deleted");
     }
 
     // ---- 时间工具 ----
@@ -123,7 +123,7 @@ impl AtomcodeSwitchApp {
         chrono::Local::now().format("%H:%M").to_string()
     }
 
-    /// 生成默认重置时间（当前时间 + 1小时）
+    /// 生成默认重置时间（当前时间 + 1小时），仅返回 HH:MM 格式
     pub fn default_reset_time() -> String {
         let secs = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -131,7 +131,7 @@ impl AtomcodeSwitchApp {
             .as_secs();
         let now_mins = (secs / 60) % 1440;
         let reset_mins = (now_mins + 60) % 1440;
-        format!("{:02}:{:02} (60m 0s)", reset_mins / 60, reset_mins % 60)
+        format!("{:02}:{:02}", reset_mins / 60, reset_mins % 60)
     }
 
     // ---- /login 输出解析 ----
@@ -142,14 +142,14 @@ impl AtomcodeSwitchApp {
             .config
             .active_account_id
             .clone()
-            .ok_or_else(|| "没有激活的账号".to_string())?;
+            .ok_or_else(|| self.i18n.t0("status_no_active_account"))?;
 
         let active_idx = self
             .config
             .accounts
             .iter()
             .position(|a| a.id == active_id)
-            .ok_or_else(|| "未找到当前激活的账号数据".to_string())?;
+            .ok_or_else(|| self.i18n.t0("status_active_account_not_found"))?;
 
         // 提取用户名并尝试匹配
         if let Some(pos) = text.find("logged in as ") {
@@ -180,7 +180,7 @@ impl AtomcodeSwitchApp {
                     new_acc.is_valid = true;
                     Self::apply_parsed_fields(new_acc, text);
                     config_io::save_config(&self.config);
-                    self.status_message = format!("已从粘贴信息更新账号: {}", login_name);
+                    self.status_message = self.i18n.t1("status_updated_from_paste", login_name);
                     return Ok(());
                 }
             }
@@ -192,7 +192,7 @@ impl AtomcodeSwitchApp {
         acc.is_valid = true;
 
         config_io::save_config(&self.config);
-        self.status_message = "账号信息已更新（手动粘贴）".to_string();
+        self.status_message = self.i18n.t0("status_updated_manual");
         Ok(())
     }
 
@@ -276,7 +276,13 @@ impl AtomcodeSwitchApp {
         for line in text.lines() {
             if line.contains("重置于") {
                 if let Some(after) = line.split("重置于").nth(1) {
-                    acc.reset_time = after.trim().to_string();
+                    let raw = after.trim().to_string();
+                    // 提取 HH:MM 部分（前5个字符）
+                    acc.reset_time = if raw.len() >= 5 && raw.as_bytes()[2] == b':' {
+                        raw[..5].to_string()
+                    } else {
+                        raw
+                    };
                 }
                 reset_found = true;
                 break;
@@ -286,7 +292,13 @@ impl AtomcodeSwitchApp {
             for line in text.lines() {
                 if line.contains("resets ") || line.contains("resets\t") {
                     if let Some(after) = line.split("resets").nth(1) {
-                        acc.reset_time = after.trim().to_string();
+                        let raw = after.trim().to_string();
+                        // 提取 HH:MM 部分（前5个字符）
+                        acc.reset_time = if raw.len() >= 5 && raw.as_bytes()[2] == b':' {
+                            raw[..5].to_string()
+                        } else {
+                            raw
+                        };
                     }
                     break;
                 }

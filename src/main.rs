@@ -5,6 +5,8 @@ mod app;
 mod atomcode_io;
 mod config_io;
 mod fetch_info;
+mod i18n;
+mod lang;
 mod models;
 mod theme;
 mod ui;

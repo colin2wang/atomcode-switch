@@ -14,7 +14,7 @@ impl AtomcodeSwitchApp {
         let (tx, rx) = std::sync::mpsc::channel();
         self.auto_update_rx = Some(rx);
         self.is_auto_updating = true;
-        self.status_message = "正在获取登录信息...".to_string();
+        self.status_message = self.i18n.t0("status_fetching");
 
         std::thread::spawn(move || {
             let mut cmd = std::process::Command::new("atomcode");
@@ -80,14 +80,14 @@ impl AtomcodeSwitchApp {
                 Ok(output) => {
                     self.manual_update_text = output;
                     self.is_auto_updating = false;
-                    self.status_message = "已获取登录信息，点击「解析并更新」完成更新".to_string();
+                    self.status_message = self.i18n.t0("status_fetched");
                 }
                 Err(std::sync::mpsc::TryRecvError::Empty) => {
                     self.auto_update_rx = Some(rx);
                 }
                 Err(std::sync::mpsc::TryRecvError::Disconnected) => {
                     self.is_auto_updating = false;
-                    self.status_message = "自动获取失败: 进程异常退出".to_string();
+                    self.status_message = self.i18n.t0("status_fetch_failed");
                 }
             }
         }

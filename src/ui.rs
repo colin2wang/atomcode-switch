@@ -3,6 +3,7 @@
 use crate::app::{AtomcodeSwitchApp, SettingsState};
 use crate::models::AppConfig;
 use crate::{atomcode_io, config_io, theme};
+use chrono::Timelike;
 use eframe::egui;
 use theme::*;
 
@@ -31,10 +32,33 @@ impl eframe::App for AtomcodeSwitchApp {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         ui.add_space(12.0);
 
+                        // 语言切换
+                        let current_lang = self.i18n.language();
+                        let lang_label = match current_lang {
+                            crate::lang::Language::ZhCn => "EN",
+                            crate::lang::Language::EnUs => "中",
+                        };
+                        if ui
+                            .add(
+                                egui::Button::new(egui::RichText::new(lang_label).size(13.0))
+                                    .rounding(4.0),
+                            )
+                            .clicked()
+                        {
+                            let new_lang = match current_lang {
+                                crate::lang::Language::ZhCn => crate::lang::Language::EnUs,
+                                crate::lang::Language::EnUs => crate::lang::Language::ZhCn,
+                            };
+                            self.i18n = crate::i18n::I18n::load(new_lang);
+                            self.config.language = new_lang.as_str().to_string();
+                            config_io::save_config(&self.config);
+                            self.status_message = self.i18n.t0("status_ready");
+                        }
+
                         // 设置
                         if ui
                             .add(
-                                egui::Button::new(egui::RichText::new("设置").size(13.0))
+                                egui::Button::new(egui::RichText::new(self.i18n.t0("toolbar_settings")).size(13.0))
                                     .rounding(4.0),
                             )
                             .clicked()
@@ -46,7 +70,7 @@ impl eframe::App for AtomcodeSwitchApp {
                         if ui
                             .add(
                                 egui::Button::new(
-                                    egui::RichText::new("同步登录信息").size(13.0),
+                                    egui::RichText::new(self.i18n.t0("toolbar_sync")).size(13.0),
                                 )
                                 .rounding(4.0),
                             )
@@ -69,7 +93,7 @@ impl eframe::App for AtomcodeSwitchApp {
 
                     let count = self.config.accounts.len();
                     ui.label(
-                        egui::RichText::new(format!("{} 个账户", count))
+                        egui::RichText::new(self.i18n.t1("bottom_accounts", &count.to_string()))
                             .size(12.0)
                             .color(GITHUB_TEXT_SECONDARY),
                     );
@@ -89,7 +113,7 @@ impl eframe::App for AtomcodeSwitchApp {
                             .color(if active_valid { GITHUB_GREEN } else { GITHUB_RED }),
                     );
                     ui.label(
-                        egui::RichText::new(if active_valid { "正常" } else { "异常" })
+                        egui::RichText::new(if active_valid { self.i18n.t0("status_normal") } else { self.i18n.t0("status_error") })
                             .size(12.0)
                             .color(if active_valid { GITHUB_GREEN } else { GITHUB_RED }),
                     );
@@ -99,7 +123,7 @@ impl eframe::App for AtomcodeSwitchApp {
                     // 导出按钮
                     if ui
                         .add(
-                            egui::Button::new(egui::RichText::new("导出").size(12.0))
+                            egui::Button::new(egui::RichText::new(self.i18n.t0("btn_export")).size(12.0))
                                 .rounding(4.0),
                         )
                         .clicked()
@@ -110,7 +134,7 @@ impl eframe::App for AtomcodeSwitchApp {
                     // 清空登录按钮
                     if ui
                         .add(
-                            egui::Button::new(egui::RichText::new("清空登录").size(12.0))
+                            egui::Button::new(egui::RichText::new(self.i18n.t0("btn_clear_auth")).size(12.0))
                                 .rounding(4.0),
                         )
                         .clicked()
@@ -119,10 +143,10 @@ impl eframe::App for AtomcodeSwitchApp {
                             Ok(_) => {
                                 self.config.active_account_id = None;
                                 config_io::save_config(&self.config);
-                                self.status_message = "已清空当前登录".to_string();
+                                self.status_message = self.i18n.t0("status_auth_cleared");
                             }
                             Err(e) => {
-                                self.status_message = format!("清空失败: {}", e);
+                                self.status_message = self.i18n.t1("status_clear_failed", &e);
                             }
                         }
                     }
@@ -185,26 +209,23 @@ impl eframe::App for AtomcodeSwitchApp {
                 .map(|a| a.auth_data.user.name.clone())
                 .unwrap_or_default();
 
-            egui::Window::new("确认删除")
+            egui::Window::new(self.i18n.t0("delete_confirm_title"))
                 .collapsible(false)
                 .resizable(false)
                 .default_size([320.0, 120.0])
                 .show(ctx, |ui| {
                     ui.add_space(8.0);
-                    ui.label(format!(
-                        "确定要删除账号 \"{}\" 吗？此操作不可撤销。",
-                        account_name
-                    ));
+                    ui.label(self.i18n.t1("delete_confirm_msg", &account_name));
                     ui.add_space(16.0);
                     ui.horizontal(|ui| {
-                        if ui.button("取消").clicked() {
+                        if ui.button(self.i18n.t0("btn_cancel")).clicked() {
                             self.delete_confirm_id = None;
                         }
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             if ui
                                 .add(
                                     egui::Button::new(
-                                        egui::RichText::new("删除")
+                                        egui::RichText::new(self.i18n.t0("btn_delete"))
                                             .size(13.0)
                                             .color(egui::Color32::WHITE),
                                     )
@@ -226,7 +247,7 @@ impl eframe::App for AtomcodeSwitchApp {
         if self.show_manual_update {
             let mut open = true;
 
-            egui::Window::new("更新账号信息")
+            egui::Window::new(self.i18n.t0("update_title"))
                 .open(&mut open)
                 .resizable(true)
                 .collapsible(false)
@@ -235,14 +256,14 @@ impl eframe::App for AtomcodeSwitchApp {
                 .show(ctx, |ui| {
                     ui.horizontal(|ui| {
                         ui.label(
-                            egui::RichText::new("可将下方文本框清空，点击「自动获取」自动填入：")
+                            egui::RichText::new(self.i18n.t0("update_desc"))
                                 .size(12.0)
                                 .color(GITHUB_TEXT_SECONDARY),
                         );
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             if self.is_auto_updating {
                                 ui.label(
-                                    egui::RichText::new("获取中...")
+                                    egui::RichText::new(self.i18n.t0("update_fetching"))
                                         .size(13.0)
                                         .color(GITHUB_BLUE)
                                         .strong(),
@@ -250,7 +271,7 @@ impl eframe::App for AtomcodeSwitchApp {
                                 if ui
                                     .add(
                                         egui::Button::new(
-                                            egui::RichText::new("取消").size(12.0),
+                                            egui::RichText::new(self.i18n.t0("update_cancel")).size(12.0),
                                         )
                                         .rounding(4.0)
                                         .fill(GITHUB_RED),
@@ -259,13 +280,13 @@ impl eframe::App for AtomcodeSwitchApp {
                                 {
                                     self.is_auto_updating = false;
                                     self.auto_update_rx = None;
-                                    self.status_message = "已取消自动获取".to_string();
+                                    self.status_message = self.i18n.t0("status_auto_fetch_cancelled");
                                 }
                             } else {
                                 if ui
                                     .add(
                                         egui::Button::new(
-                                            egui::RichText::new("自动获取")
+                                            egui::RichText::new(self.i18n.t0("update_auto_fetch"))
                                                 .size(13.0)
                                                 .color(egui::Color32::WHITE),
                                         )
@@ -289,7 +310,7 @@ impl eframe::App for AtomcodeSwitchApp {
                             ui.add_sized(
                                 ui.available_size(),
                                 egui::TextEdit::multiline(&mut self.manual_update_text)
-                                    .hint_text("在此粘贴 /login 的输出，或点击上方「自动获取」自动填入...")
+                                    .hint_text(self.i18n.t0("update_hint"))
                                     .code_editor()
                                     .desired_width(f32::INFINITY),
                             );
@@ -298,31 +319,32 @@ impl eframe::App for AtomcodeSwitchApp {
                     ui.add_space(10.0);
 
                     ui.horizontal(|ui| {
+                        let has_text = !self.manual_update_text.trim().is_empty();
                         if ui
-                            .add(
+                            .add_enabled(
+                                has_text,
                                 egui::Button::new(
-                                    egui::RichText::new("解析并更新")
+                                    egui::RichText::new(self.i18n.t0("update_parse"))
                                         .size(13.0)
                                         .color(egui::Color32::WHITE),
                                 )
                                 .rounding(4.0)
-                                .fill(GITHUB_BLUE),
+                                .fill(if has_text { GITHUB_BLUE } else { GITHUB_BORDER }),
                             )
                             .clicked()
                         {
                             let text = std::mem::take(&mut self.manual_update_text);
                             if text.trim().is_empty() {
-                                self.status_message = "粘贴内容为空".to_string();
+                                self.status_message = self.i18n.t0("status_paste_empty");
                             } else if self.config.active_account_id.is_none() {
-                                self.status_message = "没有激活的账号，请先导入账号".to_string();
+                                self.status_message = self.i18n.t0("status_no_active_import");
                             } else {
                                 match self.parse_login_output_and_update(&text) {
                                     Ok(()) => {
-                                        self.status_message =
-                                            "账号信息已更新".to_string();
+                                        self.status_message = self.i18n.t0("status_updated");
                                     }
                                     Err(e) => {
-                                        self.status_message = format!("更新失败: {}", e);
+                                        self.status_message = self.i18n.t1("status_update_failed", &e);
                                     }
                                 }
                             }
@@ -332,7 +354,7 @@ impl eframe::App for AtomcodeSwitchApp {
                         ui.with_layout(
                             egui::Layout::right_to_left(egui::Align::Center),
                             |ui| {
-                                if ui.button("取消").clicked() {
+                                if ui.button(self.i18n.t0("btn_cancel")).clicked() {
                                     self.show_manual_update = false;
                                 }
                             },
@@ -367,7 +389,7 @@ impl AtomcodeSwitchApp {
                             .strong(),
                     );
                     ui.label(
-                        egui::RichText::new("\u{00B7} 当前使用中")
+                        egui::RichText::new(self.i18n.t0("card_in_use"))
                             .size(13.0)
                             .color(GITHUB_TEXT_SECONDARY),
                     );
@@ -416,13 +438,13 @@ impl AtomcodeSwitchApp {
                             ui.add_space(4.0);
                             if acc.is_valid {
                                 ui.label(
-                                    egui::RichText::new("\u{25CF} 正常")
+                                    egui::RichText::new(self.i18n.t0("card_valid"))
                                         .size(11.0)
                                         .color(egui::Color32::from_rgb(40, 167, 69)),
                                 );
                             } else {
                                 ui.label(
-                                    egui::RichText::new("\u{25CF} 异常")
+                                    egui::RichText::new(self.i18n.t0("card_invalid"))
                                         .size(11.0)
                                         .color(egui::Color32::from_rgb(220, 53, 69)),
                                 );
@@ -440,7 +462,7 @@ impl AtomcodeSwitchApp {
                         if !is_active {
                             let switch_btn = ui.add(
                                 egui::Button::new(
-                                    egui::RichText::new("激活")
+                                    egui::RichText::new(self.i18n.t0("card_activate"))
                                         .size(13.0)
                                         .color(egui::Color32::WHITE),
                                 )
@@ -455,7 +477,7 @@ impl AtomcodeSwitchApp {
                                 ui.add_enabled(
                                     false,
                                     egui::Button::new(
-                                        egui::RichText::new("已激活")
+                                        egui::RichText::new(self.i18n.t0("card_activated"))
                                             .size(13.0)
                                             .color(GITHUB_GREEN),
                                     )
@@ -467,7 +489,7 @@ impl AtomcodeSwitchApp {
                                 if ui
                                     .add(
                                         egui::Button::new(
-                                            egui::RichText::new("更新信息")
+                                            egui::RichText::new(self.i18n.t0("card_update_info"))
                                                 .size(12.0)
                                                 .color(GITHUB_BLUE),
                                         )
@@ -488,7 +510,7 @@ impl AtomcodeSwitchApp {
                             if ui
                                 .add(
                                     egui::Button::new(
-                                        egui::RichText::new("删除")
+                                        egui::RichText::new(self.i18n.t0("card_delete"))
                                             .size(13.0)
                                             .color(egui::Color32::WHITE),
                                     )
@@ -515,7 +537,7 @@ impl AtomcodeSwitchApp {
                     );
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         ui.label(
-                            egui::RichText::new(format!("剩余 {} 天", acc.remaining_days))
+                            egui::RichText::new(self.i18n.t1("card_remaining_days", &acc.remaining_days.to_string()))
                                 .size(12.0)
                                 .color(egui::Color32::from_rgb(108, 117, 125)),
                         );
@@ -526,7 +548,7 @@ impl AtomcodeSwitchApp {
 
                 ui.horizontal(|ui| {
                     ui.label(
-                        egui::RichText::new("当前时间窗口用量")
+                        egui::RichText::new(self.i18n.t0("card_usage_label"))
                             .size(12.0)
                             .color(egui::Color32::from_rgb(108, 117, 125)),
                     );
@@ -568,7 +590,7 @@ impl AtomcodeSwitchApp {
                 // ---- 卡片底部 ----
                 ui.horizontal(|ui| {
                     ui.label(
-                        egui::RichText::new(format!("重置: {}", acc.reset_time))
+                        egui::RichText::new(self.format_reset_countdown(&acc.reset_time))
                             .size(11.0)
                             .color(GITHUB_TEXT_SECONDARY),
                     );
@@ -588,22 +610,22 @@ impl AtomcodeSwitchApp {
         ui.add_space(40.0);
         ui.vertical_centered(|ui| {
             ui.add_space(12.0);
-            ui.label(
-                egui::RichText::new("暂无账号")
-                    .size(18.0)
-                    .color(GITHUB_TEXT_SECONDARY),
-            );
-            ui.add_space(8.0);
-            ui.label(
-                egui::RichText::new("点击顶部 \"导入\" 按钮添加当前系统账号")
-                    .size(13.0)
-                    .color(GITHUB_TEXT_SECONDARY),
-            );
-            ui.add_space(16.0);
-            let import_btn = ui.add(
-                egui::Button::new(
-                    egui::RichText::new("导入当前系统账号")
-                        .size(14.0)
+                    ui.label(
+                        egui::RichText::new(self.i18n.t0("empty_no_accounts"))
+                            .size(18.0)
+                            .color(GITHUB_TEXT_SECONDARY),
+                    );
+                    ui.add_space(8.0);
+                    ui.label(
+                        egui::RichText::new(self.i18n.t0("empty_hint"))
+                            .size(13.0)
+                            .color(GITHUB_TEXT_SECONDARY),
+                    );
+                    ui.add_space(16.0);
+                    let import_btn = ui.add(
+                        egui::Button::new(
+                            egui::RichText::new(self.i18n.t0("empty_import"))
+                                .size(14.0)
                         .color(egui::Color32::WHITE),
                 )
                 .rounding(6.0)
@@ -630,7 +652,7 @@ impl AtomcodeSwitchApp {
         let mut save = false;
         let mut cancel = false;
 
-        egui::Window::new("设置")
+        egui::Window::new(self.i18n.t0("settings_title"))
             .open(&mut show_settings)
             .resizable(false)
             .collapsible(false)
@@ -642,10 +664,10 @@ impl AtomcodeSwitchApp {
                 if let Some(ref mut state) = self.settings_state {
                     // 导出目录
                     ui.label(
-                        egui::RichText::new("导出目录").size(14.0).strong(),
+                        egui::RichText::new(self.i18n.t0("settings_export_dir")).size(14.0).strong(),
                     );
                     ui.label(
-                        egui::RichText::new("自定义账号数据存储目录（默认为 ~/.atomcode-switch）")
+                        egui::RichText::new(self.i18n.t0("settings_export_dir_desc"))
                             .size(12.0)
                             .color(GITHUB_TEXT_SECONDARY),
                     );
@@ -654,11 +676,11 @@ impl AtomcodeSwitchApp {
                         ui.add(
                             egui::TextEdit::singleline(&mut state.data_dir)
                                 .desired_width(300.0)
-                                .hint_text("默认: ~/.atomcode-switch"),
+                                .hint_text(self.i18n.t0("settings_export_dir_hint")),
                         );
-                        if ui.button("浏览…").clicked() {
+                        if ui.button(self.i18n.t0("settings_browse")).clicked() {
                             if let Some(dir) =
-                                tinyfiledialogs::select_folder_dialog("选择数据目录", &state.data_dir)
+                                tinyfiledialogs::select_folder_dialog(&self.i18n.t0("dialog_select_data_dir"), &state.data_dir)
                             {
                                 // inline: 检查目标目录是否已有 atomcode-accounts.yaml
                                 let accounts_path = std::path::Path::new(&dir)
@@ -681,17 +703,20 @@ impl AtomcodeSwitchApp {
                                         .map(|a| format!("  - {}（{}）", a.auth_data.user.name, a.auth_data.user.username))
                                         .collect();
 
-                                    let msg = format!(
-                                        "目标目录已有 {} 个账号：\n{}\n\n当前程序有 {} 个账号：\n{}\n\n是否用目标目录的账号替换当前账号？",
-                                        existing_accounts.len(),
-                                        if existing_names.is_empty() { "  （无）".into() } else { existing_names.join("\n") },
-                                        self.config.accounts.len(),
-                                        if current_names.is_empty() { "  （无）".into() } else { current_names.join("\n") },
+                                    let none_label = self.i18n.t0("dialog_none");
+                                    let existing_list = if existing_names.is_empty() { none_label.clone() } else { existing_names.join("\n") };
+                                    let current_list = if current_names.is_empty() { none_label } else { current_names.join("\n") };
+                                    let msg = self.i18n.t4(
+                                        "dialog_switch_dir_msg",
+                                        &existing_accounts.len().to_string(),
+                                        &existing_list,
+                                        &self.config.accounts.len().to_string(),
+                                        &current_list,
                                     );
 
                                     let should_import = matches!(
                                         tinyfiledialogs::message_box_yes_no(
-                                            "切换导出目录",
+                                            &self.i18n.t0("dialog_switch_dir_title"),
                                             &msg,
                                             tinyfiledialogs::MessageBoxIcon::Question,
                                             tinyfiledialogs::YesNo::No,
@@ -707,10 +732,10 @@ impl AtomcodeSwitchApp {
                                             self.config.accounts = config.accounts;
                                             self.config.active_account_id = config.active_account_id;
                                             self.config.auto_switch_rules = config.auto_switch_rules;
-                                            self.status_message = format!("已导入 {} 个账号", self.config.accounts.len());
+                                            self.status_message = self.i18n.t1("status_imported_count", &self.config.accounts.len().to_string());
                                         }
                                     } else {
-                                        self.status_message = "已保留当前账号".to_string();
+                                        self.status_message = self.i18n.t0("status_kept_current");
                                     }
                                 }
                                 state.data_dir = dir;
@@ -722,10 +747,10 @@ impl AtomcodeSwitchApp {
 
                     // Atomcode 目录
                     ui.label(
-                        egui::RichText::new("Atomcode 目录").size(14.0).strong(),
+                        egui::RichText::new(self.i18n.t0("settings_atomcode_dir")).size(14.0).strong(),
                     );
                     ui.label(
-                        egui::RichText::new("自定义 auth.toml 保存目录（默认为 ~/.atomcode）")
+                        egui::RichText::new(self.i18n.t0("settings_atomcode_dir_desc"))
                             .size(12.0)
                             .color(GITHUB_TEXT_SECONDARY),
                     );
@@ -734,11 +759,11 @@ impl AtomcodeSwitchApp {
                         ui.add(
                             egui::TextEdit::singleline(&mut state.atomcode_dir)
                                 .desired_width(300.0)
-                                .hint_text("默认: ~/.atomcode"),
+                                .hint_text(self.i18n.t0("settings_atomcode_hint")),
                         );
-                        if ui.button("浏览…").clicked() {
+                        if ui.button(self.i18n.t0("settings_browse")).clicked() {
                             if let Some(path) = tinyfiledialogs::select_folder_dialog(
-                                "选择 Atomcode 目录",
+                                &self.i18n.t0("dialog_select_atomcode_dir"),
                                 &state.atomcode_dir,
                             ) {
                                 state.atomcode_dir = path;
@@ -750,30 +775,30 @@ impl AtomcodeSwitchApp {
 
                     // 自动切换规则
                     ui.label(
-                        egui::RichText::new("自动切换规则").size(14.0).strong(),
+                        egui::RichText::new(self.i18n.t0("settings_auto_switch")).size(14.0).strong(),
                     );
                     ui.add_space(4.0);
-                    ui.checkbox(&mut state.auto_switch_enabled, "启用自动切换");
+                    ui.checkbox(&mut state.auto_switch_enabled, self.i18n.t0("settings_enable_auto_switch"));
                     ui.add_space(4.0);
                     ui.horizontal(|ui| {
-                        ui.label("用量超过");
+                        ui.label(self.i18n.t0("settings_usage_exceeds"));
                         ui.add(
                             egui::DragValue::new(&mut state.max_usage_percent)
                                 .clamp_range(50.0..=100.0)
                                 .suffix("%")
                                 .speed(0.5),
                         );
-                        ui.label("时自动切换至用量最低的账号");
+                        ui.label(self.i18n.t0("settings_auto_switch_to"));
                     });
 
                     ui.add_space(16.0);
 
                     ui.horizontal(|ui| {
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if ui.button("确定").clicked() {
+                            if ui.button(self.i18n.t0("btn_confirm")).clicked() {
                                 save = true;
                             }
-                            if ui.button("取消").clicked() {
+                            if ui.button(self.i18n.t0("btn_cancel")).clicked() {
                                 cancel = true;
                             }
                         });
@@ -798,7 +823,7 @@ impl AtomcodeSwitchApp {
                 self.config.auto_switch_rules.enabled = state.auto_switch_enabled;
                 self.config.auto_switch_rules.max_usage_percent = state.max_usage_percent;
                 config_io::save_config(&self.config);
-                self.status_message = "设置已保存".to_string();
+                self.status_message = self.i18n.t0("status_settings_saved");
             }
             self.settings_state = None;
             self.show_settings = false;
@@ -817,7 +842,7 @@ impl AtomcodeSwitchApp {
 
     /// 处理导出按钮逻辑
     fn handle_export(&mut self) {
-        if let Some(path_str) = tinyfiledialogs::save_file_dialog("导出配置", "config.yaml") {
+        if let Some(path_str) = tinyfiledialogs::save_file_dialog(&self.i18n.t0("dialog_export_title"), "config.yaml") {
             let path = std::path::Path::new(&path_str);
             let should_overwrite = if path.exists() {
                 let existing_accounts = std::fs::read_to_string(path)
@@ -837,12 +862,15 @@ impl AtomcodeSwitchApp {
                     .map(|a| format!("  - {}（{}）", a.auth_data.user.name, a.auth_data.user.username))
                     .collect();
 
-                let msg = format!(
-                    "目标文件已有 {} 个账号：\n{}\n\n即将导出 {} 个账号：\n{}\n\n是否覆盖？",
-                    existing_accounts.len(),
-                    if existing_names.is_empty() { "  （无）".into() } else { existing_names.join("\n") },
-                    self.config.accounts.len(),
-                    if new_names.is_empty() { "  （无）".into() } else { new_names.join("\n") },
+                let none_label = self.i18n.t0("dialog_none");
+                let existing_list = if existing_names.is_empty() { none_label.clone() } else { existing_names.join("\n") };
+                let new_list = if new_names.is_empty() { none_label } else { new_names.join("\n") };
+                let msg = self.i18n.t4(
+                    "dialog_overwrite_msg",
+                    &existing_accounts.len().to_string(),
+                    &existing_list,
+                    &self.config.accounts.len().to_string(),
+                    &new_list,
                 );
 
                 matches!(
@@ -861,11 +889,44 @@ impl AtomcodeSwitchApp {
             if should_overwrite {
                 if let Ok(content) = serde_yaml::to_string(&self.config) {
                     let _ = std::fs::write(path, content);
-                    self.status_message = "导出成功".to_string();
+                    self.status_message = self.i18n.t0("status_exported");
                 }
             } else {
-                self.status_message = "已保留原文件".to_string();
+                self.status_message = self.i18n.t0("status_kept_original");
             }
+        }
+    }
+
+    /// 从 HH:MM 格式的重置时间实时计算倒计时，使用 i18n 字符串
+    fn format_reset_countdown(&self, reset_time: &str) -> String {
+        let trimmed = reset_time.trim();
+        if trimmed.len() < 5 || trimmed.as_bytes()[2] != b':' {
+            return self.i18n.t1("card_reset_label", reset_time);
+        }
+
+        let (h_str, m_str) = trimmed.split_at(2);
+        let m_str = &m_str[1..];
+
+        let target_h: u32 = h_str.parse().unwrap_or(0);
+        let target_m: u32 = m_str.parse().unwrap_or(0);
+        let target_secs = target_h * 3600 + target_m * 60;
+
+        let now = chrono::Local::now();
+        let now_secs = now.hour() as u32 * 3600 + now.minute() as u32 * 60 + now.second() as u32;
+
+        let diff = if target_secs > now_secs {
+            target_secs - now_secs
+        } else {
+            target_secs + 86400 - now_secs
+        };
+
+        let minutes = diff / 60;
+        let seconds = diff % 60;
+
+        if diff >= 3600 {
+            self.i18n.t4("card_reset_countdown_h", trimmed, &(diff / 3600).to_string(), &(minutes % 60).to_string(), &seconds.to_string())
+        } else {
+            self.i18n.t3("card_reset_countdown", trimmed, &minutes.to_string(), &seconds.to_string())
         }
     }
 }
