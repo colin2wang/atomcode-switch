@@ -11,6 +11,7 @@ A desktop GUI tool for managing multiple AtomCode accounts and switching between
 - **Multi-Account Management** – Import, view, and manage multiple AtomCode accounts in one place.
 - **One-Click Switching** – Switch between accounts instantly. The tool writes the selected account's `auth.toml` file to the AtomCode directory.
 - **Usage Monitoring** – See each account's usage percentage, plan name, remaining days, and reset time at a glance.
+- **Manual Info Update** – Paste `/login` output to quickly refresh plan and usage data without leaving the UI.
 - **Auto-Switch Rules** – Set a usage threshold. When the active account exceeds it, the tool automatically switches to the lowest-usage valid account.
 - **Custom AtomCode Directory** – Supports custom `auth.toml` storage locations (useful for WSL or non-default setups).
 - **Imported-Account Persistence** – Account data (including `auth.toml` content, usage stats, and plan info) is stored locally in a config file.
@@ -30,7 +31,7 @@ A desktop GUI tool for managing multiple AtomCode accounts and switching between
 
 ### Prerequisites
 
-- Rust toolchain (edition 2021)
+- Rust toolchain (edition 2024)
 - A Chinese font installed on your system (the app auto-discovers fonts on Windows, macOS, and Linux)
 
 ### Build from Source
@@ -56,6 +57,13 @@ cargo run --release
 1. Make sure you are logged into AtomCode (so `~/.atomcode/auth.toml` exists).
 2. Click **📥 Sync Login Info** in the toolbar.
 3. The account appears in the account list with its user info and plan details.
+
+### Manually Updating Account Info
+
+1. In your terminal, run the AtomCode command `/login` and copy all of its output.
+2. In the app, click **📝 更新信息** next to the active user name.
+3. Paste the `/login` output into the dialog and click **🔍 解析并更新**.
+4. The app automatically extracts your plan name, usage percentage, remaining days, and reset time.
 
 ### Switching Accounts
 

@@ -1,9 +1,12 @@
 #![windows_subsystem = "windows"]
 
+mod account_ops;
 mod app;
 mod atomcode_io;
 mod config_io;
 mod models;
+mod theme;
+mod ui;
 
 use app::AtomcodeSwitchApp;
 use eframe::egui;

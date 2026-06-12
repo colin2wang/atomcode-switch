@@ -1,5 +1,18 @@
 # Change History
 
+## v0.1.2 (2026-06-12)
+
+### Added
+- **Manual Update via /login Paste** — Click the 📝 更新信息 button next to the active user indicator to open a paste dialog. Paste the output of `/login` to automatically update plan name, usage percentage, remaining days, and reset time.
+- **Module Refactoring** — Split the monolithic `app.rs` (1471 lines) into four focused modules:
+  - `theme.rs` — Color constants, font loading, GitHub theme setup
+  - `account_ops.rs` — Account CRUD, auto-switch, /login parsing
+  - `ui.rs` — All UI rendering (toolbar, panels, cards, dialogs)
+  - `app.rs` — Struct definition and constructor only (~50 lines)
+
+### Fixed
+- **Visible Update Button** — The "📝 更新信息" button now has a visible border and background instead of `frame(false)`, making it clearly clickable
+
 ## v0.1.1 (2026-06-06)
 
 ### Added
