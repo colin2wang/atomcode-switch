@@ -10,6 +10,7 @@ impl eframe::App for AtomcodeSwitchApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         let current_time = ctx.input(|i| i.time);
         self.check_auto_switch(current_time);
+        self.poll_auto_fetch();
 
         ctx.request_repaint_after(std::time::Duration::from_secs(1));
 
@@ -30,36 +31,24 @@ impl eframe::App for AtomcodeSwitchApp {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         ui.add_space(12.0);
 
-                        // ⚙ 设置
+                        // 设置
                         if ui
                             .add(
-                                egui::Button::new(egui::RichText::new("⚙ 设置").size(13.0))
-                                    .frame(false),
+                                egui::Button::new(egui::RichText::new("设置").size(13.0))
+                                    .rounding(4.0),
                             )
                             .clicked()
                         {
                             self.show_settings = !self.show_settings;
                         }
 
-                        // 🔄 刷新
-                        if ui
-                            .add(
-                                egui::Button::new(egui::RichText::new("🔄 刷新").size(13.0))
-                                    .frame(false),
-                            )
-                            .clicked()
-                        {
-                            self.sync_active_account_status();
-                            self.status_message = "已刷新".to_string();
-                        }
-
-                        // 📥 同步登录信息
+                        // 同步登录信息
                         if ui
                             .add(
                                 egui::Button::new(
-                                    egui::RichText::new("📥 同步登录信息").size(13.0),
+                                    egui::RichText::new("同步登录信息").size(13.0),
                                 )
-                                .frame(false),
+                                .rounding(4.0),
                             )
                             .clicked()
                         {
@@ -110,8 +99,8 @@ impl eframe::App for AtomcodeSwitchApp {
                     // 导出按钮
                     if ui
                         .add(
-                            egui::Button::new(egui::RichText::new("\u{2B06} 导出").size(12.0))
-                                .frame(false),
+                            egui::Button::new(egui::RichText::new("导出").size(12.0))
+                                .rounding(4.0),
                         )
                         .clicked()
                     {
@@ -121,8 +110,8 @@ impl eframe::App for AtomcodeSwitchApp {
                     // 清空登录按钮
                     if ui
                         .add(
-                            egui::Button::new(egui::RichText::new("\u{1F504} 清空登录").size(12.0))
-                                .frame(false),
+                            egui::Button::new(egui::RichText::new("清空登录").size(12.0))
+                                .rounding(4.0),
                         )
                         .clicked()
                     {
@@ -233,46 +222,86 @@ impl eframe::App for AtomcodeSwitchApp {
                 });
         }
 
-        // ============ 手动更新信息对话框 ============
+        // ============ 更新信息对话框 ============
         if self.show_manual_update {
             let mut open = true;
 
-            egui::Window::new("📝 粘贴 /login 输出更新信息")
+            egui::Window::new("更新账号信息")
                 .open(&mut open)
                 .resizable(true)
                 .collapsible(false)
                 .default_pos([150.0, 120.0])
-                .default_size([520.0, 360.0])
+                .default_size([520.0, 380.0])
                 .show(ctx, |ui| {
-                    ui.add_space(8.0);
-                    ui.label(
-                        egui::RichText::new(
-                            "在终端中执行 /login，复制全部输出，粘贴到下方文本框后点击「解析并更新」：",
-                        )
-                        .size(13.0)
-                        .color(GITHUB_TEXT_SECONDARY),
-                    );
+                    ui.horizontal(|ui| {
+                        ui.label(
+                            egui::RichText::new("可将下方文本框清空，点击「自动获取」自动填入：")
+                                .size(12.0)
+                                .color(GITHUB_TEXT_SECONDARY),
+                        );
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if self.is_auto_updating {
+                                ui.label(
+                                    egui::RichText::new("获取中...")
+                                        .size(13.0)
+                                        .color(GITHUB_BLUE)
+                                        .strong(),
+                                );
+                                if ui
+                                    .add(
+                                        egui::Button::new(
+                                            egui::RichText::new("取消").size(12.0),
+                                        )
+                                        .rounding(4.0)
+                                        .fill(GITHUB_RED),
+                                    )
+                                    .clicked()
+                                {
+                                    self.is_auto_updating = false;
+                                    self.auto_update_rx = None;
+                                    self.status_message = "已取消自动获取".to_string();
+                                }
+                            } else {
+                                if ui
+                                    .add(
+                                        egui::Button::new(
+                                            egui::RichText::new("自动获取")
+                                                .size(13.0)
+                                                .color(egui::Color32::WHITE),
+                                        )
+                                        .rounding(4.0)
+                                        .fill(GITHUB_BLUE),
+                                    )
+                                    .clicked()
+                                {
+                                    self.manual_update_text.clear();
+                                    self.start_auto_update();
+                                }
+                            }
+                        });
+                    });
+
                     ui.add_space(8.0);
 
                     egui::ScrollArea::vertical()
-                        .max_height(220.0)
+                        .max_height(200.0)
                         .show(ui, |ui| {
                             ui.add_sized(
                                 ui.available_size(),
                                 egui::TextEdit::multiline(&mut self.manual_update_text)
-                                    .hint_text("在此粘贴 /login 的输出...")
+                                    .hint_text("在此粘贴 /login 的输出，或点击上方「自动获取」自动填入...")
                                     .code_editor()
                                     .desired_width(f32::INFINITY),
                             );
                         });
 
-                    ui.add_space(12.0);
+                    ui.add_space(10.0);
 
                     ui.horizontal(|ui| {
                         if ui
                             .add(
                                 egui::Button::new(
-                                    egui::RichText::new("🔍 解析并更新")
+                                    egui::RichText::new("解析并更新")
                                         .size(13.0)
                                         .color(egui::Color32::WHITE),
                                 )
@@ -290,21 +319,24 @@ impl eframe::App for AtomcodeSwitchApp {
                                 match self.parse_login_output_and_update(&text) {
                                     Ok(()) => {
                                         self.status_message =
-                                            "✅ 账号信息已从粘贴内容更新".to_string();
+                                            "账号信息已更新".to_string();
                                     }
                                     Err(e) => {
-                                        self.status_message = format!("❌ 更新失败: {}", e);
+                                        self.status_message = format!("更新失败: {}", e);
                                     }
                                 }
                             }
                             self.show_manual_update = false;
                         }
 
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if ui.button("取消").clicked() {
-                                self.show_manual_update = false;
-                            }
-                        });
+                        ui.with_layout(
+                            egui::Layout::right_to_left(egui::Align::Center),
+                            |ui| {
+                                if ui.button("取消").clicked() {
+                                    self.show_manual_update = false;
+                                }
+                            },
+                        );
                     });
                 });
 
@@ -318,7 +350,7 @@ impl eframe::App for AtomcodeSwitchApp {
 // ============ 辅助渲染方法 ============
 
 impl AtomcodeSwitchApp {
-    /// 渲染激活账号指示器 + 更新信息按钮
+    /// 渲染激活账号指示器
     fn render_active_indicator(&mut self, ui: &mut egui::Ui) {
         if let Some(active_id) = &self.config.active_account_id {
             if let Some(active_acc) = self.config.accounts.iter().find(|a| &a.id == active_id) {
@@ -339,20 +371,6 @@ impl AtomcodeSwitchApp {
                             .size(13.0)
                             .color(GITHUB_TEXT_SECONDARY),
                     );
-                    let update_btn = ui.add(
-                        egui::Button::new(
-                            egui::RichText::new("📝 更新信息")
-                                .size(12.0)
-                                .color(GITHUB_BLUE),
-                        )
-                        .rounding(4.0)
-                        .fill(egui::Color32::WHITE)
-                        .stroke(egui::Stroke::new(1.0, GITHUB_BORDER)),
-                    );
-                    if update_btn.clicked() {
-                        self.show_manual_update = true;
-                        self.manual_update_text.clear();
-                    }
                 });
                 ui.add_space(8.0);
             }
@@ -422,7 +440,7 @@ impl AtomcodeSwitchApp {
                         if !is_active {
                             let switch_btn = ui.add(
                                 egui::Button::new(
-                                    egui::RichText::new("切换至此账号")
+                                    egui::RichText::new("激活")
                                         .size(13.0)
                                         .color(egui::Color32::WHITE),
                                 )
@@ -433,21 +451,49 @@ impl AtomcodeSwitchApp {
                                 self.switch_to_account(&acc.id);
                             }
                         } else {
-                            ui.label(
-                                egui::RichText::new("\u{2713} 已激活")
-                                    .size(13.0)
-                                    .color(egui::Color32::from_rgb(13, 110, 253))
-                                    .strong(),
-                            );
+                            ui.horizontal(|ui| {
+                                ui.add_enabled(
+                                    false,
+                                    egui::Button::new(
+                                        egui::RichText::new("已激活")
+                                            .size(13.0)
+                                            .color(GITHUB_GREEN),
+                                    )
+                                    .rounding(4.0)
+                                    .fill(egui::Color32::from_rgb(220, 255, 220))
+                                    .stroke(egui::Stroke::new(1.0, GITHUB_GREEN)),
+                                );
+                                ui.add_space(6.0);
+                                if ui
+                                    .add(
+                                        egui::Button::new(
+                                            egui::RichText::new("更新信息")
+                                                .size(12.0)
+                                                .color(GITHUB_BLUE),
+                                        )
+                                        .rounding(4.0)
+                                        .fill(egui::Color32::WHITE)
+                                        .stroke(egui::Stroke::new(1.0, GITHUB_BORDER)),
+                                    )
+                                    .clicked()
+                                {
+                                    self.show_manual_update = true;
+                                    self.manual_update_text.clear();
+                                }
+                            });
                         }
 
                         if !is_active {
                             ui.add_space(4.0);
                             if ui
                                 .add(
-                                    egui::Button::new(egui::RichText::new("\u{1F5D1}").size(14.0))
-                                        .rounding(4.0)
-                                        .frame(false),
+                                    egui::Button::new(
+                                        egui::RichText::new("删除")
+                                            .size(13.0)
+                                            .color(egui::Color32::WHITE),
+                                    )
+                                    .rounding(4.0)
+                                    .fill(GITHUB_RED),
                                 )
                                 .clicked()
                             {
@@ -462,7 +508,7 @@ impl AtomcodeSwitchApp {
                 // ---- 卡片中部 ----
                 ui.horizontal(|ui| {
                     ui.label(
-                        egui::RichText::new(format!("\u{1F525} {}", acc.plan_name))
+                        egui::RichText::new(format!("{}", acc.plan_name))
                             .size(13.0)
                             .color(GITHUB_TEXT_PRIMARY)
                             .strong(),
@@ -528,7 +574,7 @@ impl AtomcodeSwitchApp {
                     );
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         ui.label(
-                            egui::RichText::new(format!("\u{1F552} {}", acc.last_updated))
+                            egui::RichText::new(format!("{}", acc.last_updated))
                                 .size(11.0)
                                 .color(egui::Color32::from_rgb(108, 117, 125)),
                         );
@@ -541,7 +587,6 @@ impl AtomcodeSwitchApp {
     fn render_empty_state(&mut self, ui: &mut egui::Ui) {
         ui.add_space(40.0);
         ui.vertical_centered(|ui| {
-            ui.label(egui::RichText::new("\u{1F4E5}").size(48.0));
             ui.add_space(12.0);
             ui.label(
                 egui::RichText::new("暂无账号")
@@ -557,7 +602,7 @@ impl AtomcodeSwitchApp {
             ui.add_space(16.0);
             let import_btn = ui.add(
                 egui::Button::new(
-                    egui::RichText::new("\u{1F4E5} 导入当前系统账号")
+                    egui::RichText::new("导入当前系统账号")
                         .size(14.0)
                         .color(egui::Color32::WHITE),
                 )
@@ -585,7 +630,7 @@ impl AtomcodeSwitchApp {
         let mut save = false;
         let mut cancel = false;
 
-        egui::Window::new("\u{2699} 设置")
+        egui::Window::new("设置")
             .open(&mut show_settings)
             .resizable(false)
             .collapsible(false)

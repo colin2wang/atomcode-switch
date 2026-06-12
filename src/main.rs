@@ -4,6 +4,7 @@ mod account_ops;
 mod app;
 mod atomcode_io;
 mod config_io;
+mod fetch_info;
 mod models;
 mod theme;
 mod ui;

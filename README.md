@@ -11,7 +11,7 @@ A desktop GUI tool for managing multiple AtomCode accounts and switching between
 - **Multi-Account Management** – Import, view, and manage multiple AtomCode accounts in one place.
 - **One-Click Switching** – Switch between accounts instantly. The tool writes the selected account's `auth.toml` file to the AtomCode directory.
 - **Usage Monitoring** – See each account's usage percentage, plan name, remaining days, and reset time at a glance.
-- **Manual Info Update** – Paste `/login` output to quickly refresh plan and usage data without leaving the UI.
+- **Auto & Manual Info Update** – Click "更新信息" on the active account card to open the update dialog. Either paste `/login` output manually, or click "自动获取" to run `atomcode login` in a hidden window and auto-fill the output — both use the same "解析并更新" button to extract plan, usage, remaining days, and reset time.
 - **Auto-Switch Rules** – Set a usage threshold. When the active account exceeds it, the tool automatically switches to the lowest-usage valid account.
 - **Custom AtomCode Directory** – Supports custom `auth.toml` storage locations (useful for WSL or non-default setups).
 - **Imported-Account Persistence** – Account data (including `auth.toml` content, usage stats, and plan info) is stored locally in a config file.
@@ -55,15 +55,22 @@ cargo run --release
 ### Importing an Account
 
 1. Make sure you are logged into AtomCode (so `~/.atomcode/auth.toml` exists).
-2. Click **📥 Sync Login Info** in the toolbar.
+2. Click **Sync Login Info** in the toolbar.
 3. The account appears in the account list with its user info and plan details.
 
-### Manually Updating Account Info
+### Updating Account Info
 
+Two methods, both accessed by clicking **更新信息** on the active account card:
+
+**Auto-fetch** (recommended):
+1. In the update dialog, click **自动获取**.
+2. The tool runs `atomcode login` in a hidden window, captures the output (plan, usage, expiry), and fills it into the text editor.
+3. Click **解析并更新** to parse and save.
+
+**Manual paste**:
 1. In your terminal, run the AtomCode command `/login` and copy all of its output.
-2. In the app, click **📝 更新信息** next to the active user name.
-3. Paste the `/login` output into the dialog and click **🔍 解析并更新**.
-4. The app automatically extracts your plan name, usage percentage, remaining days, and reset time.
+2. In the update dialog, paste the `/login` output into the text editor and click **解析并更新**.
+3. The app automatically extracts your plan name, usage percentage, remaining days, and reset time.
 
 ### Switching Accounts
 
@@ -75,7 +82,7 @@ Click **Delete** on an account card. If the deleted account was the active one, 
 
 ### Auto-Switch Rules
 
-Enable auto-switch in **⚙ Settings**:
+Enable auto-switch in **Settings**:
 - Toggle **Auto-Switch** on.
 - Set a **Usage Threshold (%)** (default: 95%).
 - When the active account's usage exceeds the threshold, the tool automatically switches to the account with the lowest usage.
@@ -84,7 +91,7 @@ Auto-switch is checked every 30 seconds.
 
 ### Custom AtomCode Directory
 
-If your AtomCode `auth.toml` is stored in a non-default location (e.g., inside a WSL distribution), specify the directory in **⚙ Settings** → **Custom AtomCode Directory**.
+If your AtomCode `auth.toml` is stored in a non-default location (e.g., inside a WSL distribution), specify the directory in **Settings** → **Custom AtomCode Directory**.
 
 ## Tech Stack
 

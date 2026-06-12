@@ -118,14 +118,9 @@ impl AtomcodeSwitchApp {
 
     // ---- 时间工具 ----
 
-    /// 获取当前时间字符串 (HH:MM)
+    /// 获取当前本地时间字符串 (HH:MM)
     pub fn current_time_str() -> String {
-        let secs = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
-        let mins = (secs / 60) % 1440;
-        format!("{:02}:{:02}", mins / 60, mins % 60)
+        chrono::Local::now().format("%H:%M").to_string()
     }
 
     /// 生成默认重置时间（当前时间 + 1小时）
@@ -202,8 +197,11 @@ impl AtomcodeSwitchApp {
     }
 
     /// 将解析出的字段应用到 ManagedAccount（纯借用辅助方法）
+    /// 同时支持中文和英文格式的 /login 输出
     pub fn apply_parsed_fields(acc: &mut ManagedAccount, text: &str) {
-        // 套餐名
+        // ---- 套餐名 ----
+        // 中文：套餐：CodingPlan Lite · expires ...
+        // 英文：Plan: CodingPlan Lite  ·  expires ...
         if let Some(start) = text.find("套餐：") {
             let after = &text[start + "套餐：".len()..];
             if let Some(end) = after.find("·") {
@@ -211,20 +209,52 @@ impl AtomcodeSwitchApp {
             } else if let Some(end) = after.find('\n') {
                 acc.plan_name = after[..end].trim().to_string();
             }
+        } else if let Some(start) = text.find("Plan:") {
+            let after = &text[start + "Plan:".len()..];
+            if let Some(end) = after.find("·") {
+                acc.plan_name = after[..end].trim().to_string();
+            } else if let Some(end) = after.find('\n') {
+                acc.plan_name = after[..end].trim().to_string();
+            }
         }
 
-        // 剩余天数
+        // ---- 剩余天数 ----
+        // 中文：剩余 19 天
+        // 英文：expires ... (19d / 30d remaining)
+        let mut days_found = false;
         if let Some(pos) = text.find("剩余 ") {
             let rest = &text[pos + "剩余 ".len()..];
             let days_str: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
             if !days_str.is_empty() {
                 if let Ok(days) = days_str.parse::<u32>() {
                     acc.remaining_days = days;
+                    days_found = true;
+                }
+            }
+        }
+        if !days_found {
+            // 英文：找 "d /" 前面的数字
+            if let Some(pos) = text.find("d /") {
+                let before = &text[..pos];
+                let digits: String = before
+                    .chars()
+                    .rev()
+                    .take_while(|c| c.is_ascii_digit())
+                    .collect::<String>()
+                    .chars()
+                    .rev()
+                    .collect();
+                if !digits.is_empty() {
+                    if let Ok(days) = digits.parse::<u32>() {
+                        acc.remaining_days = days;
+                    }
                 }
             }
         }
 
-        // 用量百分比
+        // ---- 用量百分比 ----
+        // 中文：用量约 0%
+        // 英文：Usage: 当前时间窗口用量约 0%
         if let Some(pos) = text.find("用量约") {
             let rest = &text[pos + "用量约".len()..];
             let num_str: String = rest
@@ -239,13 +269,27 @@ impl AtomcodeSwitchApp {
             }
         }
 
-        // 重置时间
+        // ---- 重置时间 ----
+        // 中文：重置于 21:04 (in ...)
+        // 英文：resets 21:04 (in ...)
+        let mut reset_found = false;
         for line in text.lines() {
             if line.contains("重置于") {
                 if let Some(after) = line.split("重置于").nth(1) {
                     acc.reset_time = after.trim().to_string();
                 }
+                reset_found = true;
                 break;
+            }
+        }
+        if !reset_found {
+            for line in text.lines() {
+                if line.contains("resets ") || line.contains("resets\t") {
+                    if let Some(after) = line.split("resets").nth(1) {
+                        acc.reset_time = after.trim().to_string();
+                    }
+                    break;
+                }
             }
         }
     }

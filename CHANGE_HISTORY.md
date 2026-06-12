@@ -1,9 +1,23 @@
 # Change History
 
-## v0.1.2 (2026-06-12)
+## v0.1.3 (2026-06-12)
 
 ### Added
-- **Manual Update via /login Paste** — Click the 📝 更新信息 button next to the active user indicator to open a paste dialog. Paste the output of `/login` to automatically update plan name, usage percentage, remaining days, and reset time.
+- **Auto-Fetch from `atomcode login`** — New "自动获取" button in the update dialog runs `atomcode login` in a hidden window, captures the output, and fills it into the text editor. The user then clicks "解析并更新" to parse, the same as manual paste.
+- **`fetch_info` Module** — Extracted auto-fetch logic (`start_auto_update`, `poll_auto_fetch`) into a dedicated `fetch_info.rs` module.
+- **English /login Output Support** — The `/login` parser now handles both Chinese and English output formats (e.g., `Plan:` / `套餐：`, `d /` / `剩余`, `resets` / `重置于`).
+- **`chrono` Dependency** — Added for correct local timezone handling.
+
+### Changed
+- **"更新信息" Button Relocated** — Moved from the top active-indicator bar into the active account's card (right next to "✓ 已激活"). Only visible on the active card.
+- **Streamlined Update Dialog** — Auto-fetch and manual paste now share the same text box and the same "解析并更新" button, providing a unified workflow.
+- **Local Timezone** — `current_time_str()` now uses `chrono::Local::now()` instead of manually computing from UTC epoch, fixing incorrect display times in non-UTC timezones.
+
+### Removed
+- **"刷新" Toolbar Button** — Removed
+
+### Added
+- **Manual Update via /login Paste** — Click the "更新信息" button next to the active user indicator to open a paste dialog. Paste the output of `/login` to automatically update plan name, usage percentage, remaining days, and reset time.
 - **Module Refactoring** — Split the monolithic `app.rs` (1471 lines) into four focused modules:
   - `theme.rs` — Color constants, font loading, GitHub theme setup
   - `account_ops.rs` — Account CRUD, auto-switch, /login parsing
@@ -11,7 +25,7 @@
   - `app.rs` — Struct definition and constructor only (~50 lines)
 
 ### Fixed
-- **Visible Update Button** — The "📝 更新信息" button now has a visible border and background instead of `frame(false)`, making it clearly clickable
+- **Visible Update Button** — The "更新信息" button now has a visible border and background instead of `frame(false)`, making it clearly clickable
 
 ## v0.1.1 (2026-06-06)
 

@@ -25,6 +25,8 @@ pub struct AtomcodeSwitchApp {
     pub last_auto_check: f64,
     pub show_manual_update: bool,
     pub manual_update_text: String,
+    pub is_auto_updating: bool,
+    pub auto_update_rx: Option<std::sync::mpsc::Receiver<String>>,
 }
 
 impl AtomcodeSwitchApp {
@@ -41,6 +43,8 @@ impl AtomcodeSwitchApp {
             last_auto_check: 0.0,
             show_manual_update: false,
             manual_update_text: String::new(),
+            is_auto_updating: false,
+            auto_update_rx: None,
         };
 
         app.sync_active_account_status();
