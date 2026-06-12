@@ -37,6 +37,10 @@ pub struct AtomcodeSwitchApp {
     show_settings: bool,
     delete_confirm_id: Option<String>,
     last_auto_check: f64,
+    /// 手动更新信息对话框是否打开
+    show_manual_update: bool,
+    /// 手动更新粘贴的文本
+    manual_update_text: String,
 }
 
 impl AtomcodeSwitchApp {
@@ -52,6 +56,8 @@ impl AtomcodeSwitchApp {
             show_settings: false,
             delete_confirm_id: None,
             last_auto_check: 0.0,
+            show_manual_update: false,
+            manual_update_text: String::new(),
         };
 
         // 启动时同步当前系统账号状态
@@ -400,6 +406,105 @@ impl AtomcodeSwitchApp {
             GITHUB_YELLOW // 黄色
         } else {
             GITHUB_RED // 红色
+        }
+    }
+    /// 从 /login 输出文本中解析信息并更新当前激活账号（通过索引避免借用冲突）
+    fn parse_login_output_and_update(&mut self, text: &str) -> Result<(), String> {
+        let active_id = self.config.active_account_id.clone()
+            .ok_or_else(|| "没有激活的账号".to_string())?;
+
+        let active_idx = self.config.accounts.iter().position(|a| a.id == active_id)
+            .ok_or_else(|| "未找到当前激活的账号数据".to_string())?;
+
+        // 尝试提取已登录的用户名，用于匹配账号（如果当前活跃账号名不匹配则尝试查找）
+        if let Some(pos) = text.find("logged in as ") {
+            let rest = &text[pos + "logged in as ".len()..];
+            let paren_end = rest.find(|c: char| c.is_ascii_whitespace() || c == '。' || c == '\n');
+            let username_section = if let Some(e) = paren_end { &rest[..e] } else { rest.trim_end() };
+
+            let login_name = if let Some(paren) = username_section.find('(') {
+                username_section[..paren].trim()
+            } else {
+                username_section.trim()
+            };
+
+            // 检查当前活跃账号的用户名是否匹配
+            let current_name = &self.config.accounts[active_idx].auth_data.user.name;
+            if current_name != login_name {
+                // 按用户名查找匹配的账号
+                if let Some(matched_idx) = self.config.accounts.iter().position(|a| {
+                    a.auth_data.user.name == login_name || a.auth_data.user.username == login_name
+                }) {
+                    self.config.active_account_id = Some(self.config.accounts[matched_idx].id.clone());
+                    let new_acc = &mut self.config.accounts[matched_idx];
+                    new_acc.last_updated = Self::current_time_str();
+                    new_acc.is_valid = true;
+                    // 继续用匹配到的账号更新其他字段
+                    let acc = &mut self.config.accounts[matched_idx];
+                    Self::apply_parsed_fields(acc, text);
+                    config_io::save_config(&self.config);
+                    self.status_message = format!("已从粘贴信息更新账号: {}", login_name);
+                    return Ok(());
+                }
+            }
+        }
+
+        // 直接在活跃账号上应用解析字段
+        let acc = &mut self.config.accounts[active_idx];
+        Self::apply_parsed_fields(acc, text);
+        acc.last_updated = Self::current_time_str();
+        acc.is_valid = true;
+
+        config_io::save_config(&self.config);
+        self.status_message = "账号信息已更新（手动粘贴）".to_string();
+        Ok(())
+    }
+
+    /// 将解析出的字段应用到指定的 ManagedAccount 上（纯借用辅助方法）
+    fn apply_parsed_fields(acc: &mut ManagedAccount, text: &str) {
+        // 提取套餐名：套餐：CodingPlan Lite  ·  到期时间
+        if let Some(start) = text.find("套餐：") {
+            let after = &text[start + "套餐：".len()..];
+            if let Some(end) = after.find("·") {
+                acc.plan_name = after[..end].trim().to_string();
+            } else if let Some(end) = after.find('\n') {
+                acc.plan_name = after[..end].trim().to_string();
+            }
+        }
+
+        // 提取剩余天数：剩余 19d / 共 30d
+        if let Some(pos) = text.find("剩余 ") {
+            let rest = &text[pos + "剩余 ".len()..];
+            let days_str: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
+            if !days_str.is_empty() {
+                if let Ok(days) = days_str.parse::<u32>() {
+                    acc.remaining_days = days;
+                }
+            }
+        }
+
+        // 提取用量百分比：用量约 7%
+        if let Some(pos) = text.find("用量约") {
+            let rest = &text[pos + "用量约".len()..];
+            let num_str: String = rest.chars()
+                .skip_while(|c| c.is_whitespace())
+                .take_while(|c| c.is_ascii_digit() || *c == '.')
+                .collect();
+            if !num_str.is_empty() {
+                if let Ok(pct) = num_str.parse::<f32>() {
+                    acc.usage_percent = pct;
+                }
+            }
+        }
+
+        // 提取重置时间所在行
+        for line in text.lines() {
+            if line.contains("重置于") {
+                if let Some(after) = line.split("重置于").nth(1) {
+                    acc.reset_time = after.trim().to_string();
+                }
+                break;
+            }
         }
     }
 }
@@ -895,6 +1000,20 @@ impl eframe::App for AtomcodeSwitchApp {
                                                 .size(13.0)
                                                 .color(GITHUB_TEXT_SECONDARY),
                                         );
+                                        let update_btn = ui.add(
+                                            egui::Button::new(
+                                                egui::RichText::new("📝 更新信息")
+                                                    .size(12.0)
+                                                    .color(GITHUB_BLUE),
+                                            )
+                                            .rounding(4.0)
+                                            .fill(egui::Color32::WHITE)
+                                            .stroke(egui::Stroke::new(1.0, GITHUB_BORDER)),
+                                        );
+                                        if update_btn.clicked() {
+                                            self.show_manual_update = true;
+                                            self.manual_update_text.clear();
+                                        }
                                     });
                                     ui.add_space(8.0);
                                 }
@@ -1270,6 +1389,83 @@ impl eframe::App for AtomcodeSwitchApp {
                         });
                     });
                 });
+        }
+
+        // ============ 手动更新信息对话框 ============
+        if self.show_manual_update {
+            let mut open = true;
+
+            egui::Window::new("📝 粘贴 /login 输出更新信息")
+                .open(&mut open)
+                .resizable(true)
+                .collapsible(false)
+                .default_pos([150.0, 120.0])
+                .default_size([520.0, 360.0])
+                .show(ctx, |ui| {
+                    ui.add_space(8.0);
+                    ui.label(
+                        egui::RichText::new("在终端中执行 /login，复制全部输出，粘贴到下方文本框后点击「解析并更新」：")
+                            .size(13.0)
+                            .color(GITHUB_TEXT_SECONDARY),
+                    );
+                    ui.add_space(8.0);
+
+                    egui::ScrollArea::vertical()
+                        .max_height(220.0)
+                        .show(ui, |ui| {
+                            ui.add_sized(
+                                ui.available_size(),
+                                egui::TextEdit::multiline(&mut self.manual_update_text)
+                                    .hint_text("在此粘贴 /login 的输出...")
+                                    .code_editor()
+                                    .desired_width(f32::INFINITY),
+                            );
+                        });
+
+                    ui.add_space(12.0);
+
+                    ui.horizontal(|ui| {
+                        if ui
+                            .add(
+                                egui::Button::new(
+                                    egui::RichText::new("🔍 解析并更新")
+                                        .size(13.0)
+                                        .color(egui::Color32::WHITE),
+                                )
+                                .rounding(4.0)
+                                .fill(GITHUB_BLUE),
+                            )
+                            .clicked()
+                        {
+                            let text = std::mem::take(&mut self.manual_update_text);
+                            if text.trim().is_empty() {
+                                self.status_message = "粘贴内容为空".to_string();
+                            } else if self.config.active_account_id.is_none() {
+                                self.status_message = "没有激活的账号，请先导入账号".to_string();
+                            } else {
+                                match self.parse_login_output_and_update(&text) {
+                                    Ok(()) => {
+                                        self.status_message = "✅ 账号信息已从粘贴内容更新".to_string();
+                                    }
+                                    Err(e) => {
+                                        self.status_message = format!("❌ 更新失败: {}", e);
+                                    }
+                                }
+                            }
+                            self.show_manual_update = false;
+                        }
+
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if ui.button("取消").clicked() {
+                                self.show_manual_update = false;
+                            }
+                        });
+                    });
+                });
+
+            if !open {
+                self.show_manual_update = false;
+            }
         }
     }
 }
