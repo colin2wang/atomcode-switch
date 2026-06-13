@@ -11,6 +11,14 @@
 - **New `combine_reset_datetime()`** — Helper that combines today's date with a parsed `HH:MM` value; automatically advances to tomorrow if the time has already passed today.
 - **`format_reset_countdown()`** — Now parses `YYYY-MM-DD HH:MM` and computes the exact `target - now` diff instead of guessing "next day" by adding 86400s. Falls back to legacy `HH:MM` parsing for old configs.
 
+### Refactored
+- **Introduced `lib.rs`** — Extracted all module declarations from `main.rs` into a new `src/lib.rs` library crate root. `main.rs` is now a thin binary entry point that imports `AtomcodeSwitchApp` from the library. Only `models` module is publicly exported; all other modules are private to the library.
+- **Restructured `src/` into subdirectories by responsibility**:
+  - `app/` — `mod.rs` (struct + constructor), `ui.rs` (all rendering), `theme.rs` (colors + fonts)
+  - `ops/` — `account_ops.rs` (CRUD + /login parser), `fetch_info.rs` (auto-fetch)
+  - `io/` — `config_io.rs` (YAML config), `atomcode_io.rs` (auth.toml)
+  - `i18n/` — `mod.rs` (I18n struct), `lang/` (per-language `.rs` files)
+
 ## v0.1.4 (2026-06-12)
 
 ### Added

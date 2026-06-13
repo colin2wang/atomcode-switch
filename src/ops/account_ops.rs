@@ -1,10 +1,9 @@
 //! 账号操作：同步、切换、导入、删除、自动切换、/login 解析
 
 use crate::models::ManagedAccount;
-use crate::{atomcode_io, config_io};
-use chrono::Timelike;
-
+use crate::io::{atomcode_io, config_io};
 use crate::app::AtomcodeSwitchApp;
+use chrono::Timelike;
 
 impl AtomcodeSwitchApp {
     /// 同步当前激活账号的状态（从 auth.toml 读取）

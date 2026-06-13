@@ -2,7 +2,8 @@
 
 use crate::app::{AtomcodeSwitchApp, SettingsState};
 use crate::models::AppConfig;
-use crate::{atomcode_io, config_io, theme};
+use crate::io::{atomcode_io, config_io};
+use crate::app::theme;
 use chrono::Timelike;
 use eframe::egui;
 use theme::*;
@@ -35,8 +36,8 @@ impl eframe::App for AtomcodeSwitchApp {
                         // 语言切换
                         let current_lang = self.i18n.language();
                         let lang_label = match current_lang {
-                            crate::lang::Language::ZhCn => "EN",
-                            crate::lang::Language::EnUs => "中",
+                            crate::i18n::lang::Language::ZhCn => "EN",
+                            crate::i18n::lang::Language::EnUs => "中",
                         };
                         if ui
                             .add(
@@ -46,8 +47,8 @@ impl eframe::App for AtomcodeSwitchApp {
                             .clicked()
                         {
                             let new_lang = match current_lang {
-                                crate::lang::Language::ZhCn => crate::lang::Language::EnUs,
-                                crate::lang::Language::EnUs => crate::lang::Language::ZhCn,
+                                crate::i18n::lang::Language::ZhCn => crate::i18n::lang::Language::EnUs,
+                                crate::i18n::lang::Language::EnUs => crate::i18n::lang::Language::ZhCn,
                             };
                             self.i18n = crate::i18n::I18n::load(new_lang);
                             self.config.language = new_lang.as_str().to_string();

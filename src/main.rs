@@ -1,27 +1,14 @@
 #![windows_subsystem = "windows"]
 
-mod account_ops;
-mod app;
-mod atomcode_io;
-mod config_io;
-mod fetch_info;
-mod i18n;
-mod lang;
-mod models;
-mod theme;
-mod ui;
-
-use app::AtomcodeSwitchApp;
+use atomcode_switch::AtomcodeSwitchApp;
 use eframe::egui;
 use std::sync::Arc;
 
 fn main() -> eframe::Result<()> {
-    // 加载窗口图标（使用轻量 ico crate）
     let icon = {
         let bytes = include_bytes!("../atomcode.ico");
         let icon_dir = ico::IconDir::read(std::io::Cursor::new(bytes))
             .expect("无法解析 atomcode.ico");
-        // 选取分辨率最高的图标
         let entry = icon_dir.entries()
             .iter()
             .max_by_key(|e| e.width() * e.height())

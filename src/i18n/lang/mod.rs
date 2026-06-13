@@ -1,7 +1,7 @@
 //! 国际化翻译 — 每门语言一个独立的 .rs 文件
 //!
 //! 新增语言步骤：
-//! 1. 创建 src/lang/xx.rs，实现 `pub fn get(key: &str) -> &str`
+//! 1. 创建 src/i18n/lang/xx.rs，实现 `pub fn get(key: &str) -> &str`
 //! 2. 在本文件添加 `pub mod xx;`
 //! 3. 在 `Language` 枚举添加 `Xx` 变体
 //! 4. 在 `lookup()` 中添加匹配臂

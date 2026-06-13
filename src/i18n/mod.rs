@@ -1,8 +1,6 @@
-//! 国际化字符串查找 — 代理到 lang 模块的各语言 .rs 文件
-//!
-//! 用法：self.i18n.t0("key")  /  self.i18n.t1("key", &arg)  /  ...
+pub mod lang;
 
-use crate::lang::Language;
+use self::lang::Language;
 
 /// 国际化字符串查找器
 pub struct I18n {

@@ -1,13 +1,10 @@
-//! 主应用定义 — struct、new() 构造器
-//!
-//! 功能代码拆分到同级模块：
-//! - [`theme`] — 颜色常量、字体、样式
-//! - [`account_ops`] — 账号 CRUD、自动切换、/login 解析
-//! - [`ui`] — 所有 UI 渲染（update、面板、对话框）
+pub mod theme;
+pub mod ui;
 
 use crate::i18n::I18n;
-use crate::lang::Language;
-use crate::{config_io, models::AppConfig};
+use crate::i18n::lang::Language;
+use crate::io::config_io;
+use crate::models::AppConfig;
 
 /// 设置对话框的临时状态
 pub struct SettingsState {
@@ -34,8 +31,8 @@ pub struct AtomcodeSwitchApp {
 
 impl AtomcodeSwitchApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        crate::theme::setup_github_theme(&cc.egui_ctx);
-        crate::theme::setup_fonts(&cc.egui_ctx);
+        crate::app::theme::setup_github_theme(&cc.egui_ctx);
+        crate::app::theme::setup_fonts(&cc.egui_ctx);
 
         let config = config_io::load_config();
         let lang = Language::from_str(&config.language);

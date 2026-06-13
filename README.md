@@ -98,18 +98,23 @@ If your AtomCode `auth.toml` is stored in a non-default location (e.g., inside a
 
 | Module | Description |
 |--------|-------------|
-| [`i18n.rs`](src/i18n.rs) | Internationalization wrapper. Provides `I18n` struct with a function-pointer lookup per language, and `t0`–`t4` helper methods for parameterized string formatting with `{0}` `{1}` placeholders. |
-| [`lang.rs`](src/lang.rs) + [`lang/zh_cn.rs`](src/lang/zh_cn.rs) / [`lang/en_us.rs`](src/lang/en_us.rs) | Language definitions. Each language is a standalone `.rs` file exporting `pub fn get(key: &str) -> &str` via a match expression. Adding a new language = one new file + one enum variant. |
-| [`main.rs`](src/main.rs) | Entry point. Loads the window icon from `atomcode.ico`, configures viewport size and min constraints, then launches the eframe event loop. Windows subsystem attribute hides the console window in release builds. |
-| [`app.rs`](src/app.rs) | Application state (`AtomcodeSwitchApp` struct) and constructor. Holds the `AppConfig`, settings dialog state, status message, delete confirmation state, and manual-update dialog fields (text, auto-fetch flag, channel receiver). |
-| [`ui.rs`](src/ui.rs) | All UI rendering. Implements `eframe::App::update()` with top toolbar, bottom status bar, settings window, delete confirmation dialog, and the manual-update info window. Contains account card rendering with usage progress bar, plan info, dynamic reset countdown (`format_reset_countdown` — supports both `YYYY-MM-DD HH:MM` and legacy `HH:MM` formats), and the auto-fetch flow. |
-| [`models.rs`](src/models.rs) | Data structures: `AuthToml` (auth.toml deserialization), `User` (user profile), `AppConfig` (managed accounts + auto-switch rules), `ManagedAccount` (per-account fields: plan, usage, reset time, remaining days, validity), and `AutoSwitchRules`. |
-| [`account_ops.rs`](src/account_ops.rs) | Account CRUD operations + `/login` output parser. Includes: `sync_active_account_status` (read auth.toml to detect active account), `check_auto_switch` (periodic usage-based auto-switch), `switch_to_account` (write auth.toml + update config), `import_current_auth` (import from current auth.toml), `delete_account`, `parse_login_output_and_update` (parse `/login` text to extract plan, usage %, remaining days, and reset time with full date — supports both Chinese and English output formats). Reset time is stored as `YYYY-MM-DD HH:MM` for accurate cross-day countdown. |
-| [`fetch_info.rs`](src/fetch_info.rs) | Auto-fetch flow control. Spawns a hidden `atomcode login` process (using `CREATE_NO_WINDOW` on Windows), captures its output via background threads, then provides the result to the manual-update text box. |
-| [`atomcode_io.rs`](src/atomcode_io.rs) | Low-level auth.toml file I/O. `read_current_auth` / `write_auth` / `clear_auth` — handles custom directory resolution and TOML serialization. |
-| [`config_io.rs`](src/config_io.rs) | Local config file management. Manages two files: `config.yaml` (next to the exe, stores custom data directory path) and `atomcode-accounts.yaml` (in the data dir, stores all account data, active ID, and auto-switch rules). Includes automatic migration from the old single-file layout. |
-| [`theme.rs`](src/theme.rs) | GitHub-style light theme and Chinese font support. Provides color constants (`GITHUB_BG`, `GITHUB_BLUE`, etc.), color helper functions (`usage_color`, `progress_bar_color`), cross-platform Chinese font auto-discovery (Windows → msyh.ttc, macOS → PingFang.ttc, Linux → multiple distributions), and theme application via `setup_github_theme`. |
-| [`build.rs`](build.rs) | Build script that embeds `atomcode.ico` into the Windows `.exe` via `embed-resource`, so the compiled binary has a proper file manager icon. |
+| [`lib.rs`](src/lib.rs) | Library crate root. Declares all modules (only `models` is `pub`), re-exports `AtomcodeSwitchApp`. |
+| [`main.rs`](src/main.rs) | Thin binary entry point. Loads the window icon, configures viewport, and launches eframe. |
+| **`app/`** | Application core — struct definition, UI rendering, and theme. |
+| [`app/mod.rs`](src/app/mod.rs) | `AtomcodeSwitchApp` struct and constructor. Holds config, i18n, settings state, and dialog fields. |
+| [`app/ui.rs`](src/app/ui.rs) | All UI rendering. `eframe::App::update()`, toolbar, cards, settings window, dialogs, and `format_reset_countdown`. |
+| [`app/theme.rs`](src/app/theme.rs) | GitHub-style light theme, color constants, Chinese font auto-discovery, and style setup. |
+| **`ops/`** | Business operations — account CRUD, auto-switch, login parsing, and auto-fetch. |
+| [`ops/account_ops.rs`](src/ops/account_ops.rs) | Account CRUD + `/login` parser. Sync, switch, import, delete, auto-switch, and `apply_parsed_fields`. |
+| [`ops/fetch_info.rs`](src/ops/fetch_info.rs) | Auto-fetch flow. Spawns hidden `atomcode login`, captures output via background threads. |
+| **`io/`** | File I/O — config persistence and auth.toml read/write. |
+| [`io/config_io.rs`](src/io/config_io.rs) | Config file management. Loads/saves `atomcode-accounts.yaml` + local `config.yaml`, includes old-layout migration. |
+| [`io/atomcode_io.rs`](src/io/atomcode_io.rs) | Low-level auth.toml I/O. `read_current_auth` / `write_auth` / `clear_auth` with custom directory support. |
+| **`i18n/`** | Internationalization — string lookup and language definitions. |
+| [`i18n/mod.rs`](src/i18n/mod.rs) | `I18n` struct with `t0`–`t4` parameterized string helpers. |
+| [`i18n/lang/`](src/i18n/lang/) | Language definitions. Each language = one `.rs` file with `pub fn get(key) -> &str`. |
+| [`models.rs`](src/models.rs) | Data structures: `AuthToml`, `User`, `AppConfig`, `ManagedAccount`, `AutoSwitchRules`. |
+| [`build.rs`](build.rs) | Build script that embeds `atomcode.ico` into the Windows `.exe`. |
 
 ## Tech Stack
 
