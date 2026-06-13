@@ -43,6 +43,13 @@ pub fn progress_bar_color(percent: f32) -> egui::Color32 {
     }
 }
 
+/// 为现有按钮应用无边框样式
+pub fn style_button_borderless(button: egui::Button<'_>) -> egui::Button<'_> {
+    button
+        .fill(egui::Color32::TRANSPARENT)
+        .stroke(egui::Stroke::NONE)
+}
+
 /// 加载系统中文字体（优先微软雅黑）
 pub fn load_chinese_font() -> Option<Vec<u8>> {
     let font_paths = [

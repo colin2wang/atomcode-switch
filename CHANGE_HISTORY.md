@@ -19,6 +19,14 @@
   - `io/` — `config_io.rs` (YAML config), `atomcode_io.rs` (auth.toml)
   - `i18n/` — `mod.rs` (I18n struct), `lang/` (per-language `.rs` files)
 
+### UI Improvements
+- **Borderless toolbar & status bar buttons** — Added `style_button_borderless()` helper in `theme.rs`. All buttons in the top toolbar (language, settings, sync) and bottom status bar (export, clear auth) now render without borders or fill, only showing text on hover.
+- **Improved card styling** — Cards now have `rounding(10.0)` (was 8.0), outer margin `symmetric(12, 8)` for balanced spacing, and a subtle drop shadow for depth.
+- **Refined progress bar** — Bar height reduced to 6px with `rounding(3.0)` for a sleeker look.
+- **Polished panels** — Toolbar height increased to 44px, status bar to 38px, with consistent 8px horizontal margins. Active account name bumped to 16px. Settings window now has rounded corners (12px) and a soft shadow.
+- **Centered toolbar status text** — Left-side status message in the toolbar is now vertically centered using `Layout::left_to_right(Align::Center)`.
+- **Expired countdown indicator** — When a reset time has already passed, the card now shows "重置: {time}（请更新）" in yellow (`GITHUB_YELLOW`) instead of just the reset label. `format_reset_countdown()` now returns `(String, Color32)` to support color-coded states.
+
 ## v0.1.4 (2026-06-12)
 
 ### Added

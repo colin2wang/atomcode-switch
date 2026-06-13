@@ -26,6 +26,7 @@ pub fn get(key: &str) -> &str {
         "card_reset_label" => "重置: {0}",
         "card_reset_countdown" => "重置: {0}（还有 {1} 分 {2} 秒）",
         "card_reset_countdown_h" => "重置: {0}（还有 {1} 小时 {2} 分 {3} 秒）",
+        "card_reset_expired" => "重置: {0}（请更新）",
 
         // ======== 空状态 ========
         "empty_no_accounts" => "暂无账号",

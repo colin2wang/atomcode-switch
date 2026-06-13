@@ -26,6 +26,7 @@ pub fn get(key: &str) -> &str {
         "card_reset_label" => "Reset: {0}",
         "card_reset_countdown" => "Reset: {0} (in {1}m {2}s)",
         "card_reset_countdown_h" => "Reset: {0} (in {1}h {2}m {3}s)",
+        "card_reset_expired" => "Reset: {0} (please update)",
 
         // ======== Empty State ========
         "empty_no_accounts" => "No accounts",

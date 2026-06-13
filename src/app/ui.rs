@@ -18,20 +18,22 @@ impl eframe::App for AtomcodeSwitchApp {
 
         // ============ 顶部工具栏 ============
         egui::TopBottomPanel::top("toolbar")
-            .exact_height(40.0)
+            .exact_height(44.0)
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     // 左侧：状态消息
-                    ui.add_space(12.0);
-                    ui.label(
-                        egui::RichText::new(&self.status_message)
-                            .size(12.0)
-                            .color(GITHUB_TEXT_SECONDARY),
-                    );
+                    ui.add_space(8.0);
+                    ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                        ui.label(
+                            egui::RichText::new(&self.status_message)
+                                .size(12.0)
+                                .color(GITHUB_TEXT_SECONDARY),
+                        );
+                    });
 
                     // 右侧按钮组
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ui.add_space(12.0);
+                        ui.add_space(8.0);
 
                         // 语言切换
                         let current_lang = self.i18n.language();
@@ -41,8 +43,9 @@ impl eframe::App for AtomcodeSwitchApp {
                         };
                         if ui
                             .add(
-                                egui::Button::new(egui::RichText::new(lang_label).size(13.0))
-                                    .rounding(4.0),
+                                style_button_borderless(
+                                    egui::Button::new(egui::RichText::new(lang_label).size(13.0).color(GITHUB_TEXT_PRIMARY))
+                                )
                             )
                             .clicked()
                         {
@@ -59,8 +62,9 @@ impl eframe::App for AtomcodeSwitchApp {
                         // 设置
                         if ui
                             .add(
-                                egui::Button::new(egui::RichText::new(self.i18n.t0("toolbar_settings")).size(13.0))
-                                    .rounding(4.0),
+                                style_button_borderless(
+                                    egui::Button::new(egui::RichText::new(self.i18n.t0("toolbar_settings")).size(13.0).color(GITHUB_TEXT_PRIMARY))
+                                )
                             )
                             .clicked()
                         {
@@ -70,27 +74,28 @@ impl eframe::App for AtomcodeSwitchApp {
                         // 同步登录信息
                         if ui
                             .add(
-                                egui::Button::new(
-                                    egui::RichText::new(self.i18n.t0("toolbar_sync")).size(13.0),
+                                style_button_borderless(
+                                    egui::Button::new(
+                                        egui::RichText::new(self.i18n.t0("toolbar_sync")).size(13.0).color(GITHUB_TEXT_PRIMARY),
+                                    )
                                 )
-                                .rounding(4.0),
                             )
                             .clicked()
                         {
                             self.import_current_auth();
                         }
 
-                        ui.add_space(12.0);
+                        ui.add_space(4.0);
                     });
                 });
             });
 
         // ============ 底部状态栏 ============
         egui::TopBottomPanel::bottom("bottom_panel")
-            .exact_height(36.0)
+            .exact_height(38.0)
             .show(ctx, |ui| {
-                ui.horizontal_centered(|ui| {
-                    ui.add_space(12.0);
+            ui.horizontal_centered(|ui| {
+                    ui.add_space(8.0);
 
                     let count = self.config.accounts.len();
                     ui.label(
@@ -124,8 +129,9 @@ impl eframe::App for AtomcodeSwitchApp {
                     // 导出按钮
                     if ui
                         .add(
-                            egui::Button::new(egui::RichText::new(self.i18n.t0("btn_export")).size(12.0))
-                                .rounding(4.0),
+                            style_button_borderless(
+                                egui::Button::new(egui::RichText::new(self.i18n.t0("btn_export")).size(12.0).color(GITHUB_TEXT_PRIMARY))
+                            )
                         )
                         .clicked()
                     {
@@ -135,8 +141,9 @@ impl eframe::App for AtomcodeSwitchApp {
                     // 清空登录按钮
                     if ui
                         .add(
-                            egui::Button::new(egui::RichText::new(self.i18n.t0("btn_clear_auth")).size(12.0))
-                                .rounding(4.0),
+                            style_button_borderless(
+                                egui::Button::new(egui::RichText::new(self.i18n.t0("btn_clear_auth")).size(12.0).color(GITHUB_TEXT_PRIMARY))
+                            )
                         )
                         .clicked()
                     {
@@ -154,7 +161,7 @@ impl eframe::App for AtomcodeSwitchApp {
 
                     // 右侧状态消息
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ui.add_space(12.0);
+                        ui.add_space(8.0);
                         ui.label(
                             egui::RichText::new(&self.status_message)
                                 .size(12.0)
@@ -176,9 +183,9 @@ impl eframe::App for AtomcodeSwitchApp {
             egui::ScrollArea::vertical()
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
-                    ui.add_space(12.0);
+                    ui.add_space(16.0);
                     ui.horizontal(|ui| {
-                        ui.add_space(16.0);
+                        ui.add_space(20.0);
                         ui.vertical(|ui| {
                             // 当前使用中的账号指示器
                             self.render_active_indicator(ui);
@@ -385,7 +392,7 @@ impl AtomcodeSwitchApp {
                     );
                     ui.label(
                         egui::RichText::new(&active_acc.auth_data.user.name)
-                            .size(15.0)
+                            .size(16.0)
                             .color(GITHUB_TEXT_PRIMARY)
                             .strong(),
                     );
@@ -395,7 +402,7 @@ impl AtomcodeSwitchApp {
                             .color(GITHUB_TEXT_SECONDARY),
                     );
                 });
-                ui.add_space(8.0);
+                ui.add_space(12.0);
             }
         }
     }
@@ -404,13 +411,19 @@ impl AtomcodeSwitchApp {
     fn render_account_card(&mut self, ui: &mut egui::Ui, acc: &crate::models::ManagedAccount, is_active: bool) {
         egui::Frame::default()
             .fill(egui::Color32::WHITE)
-            .rounding(8.0)
+            .rounding(10.0)
             .stroke(egui::Stroke::new(
                 1.0,
                 if is_active { GITHUB_BLUE } else { GITHUB_BORDER },
             ))
             .inner_margin(egui::Margin::symmetric(20.0, 16.0))
-            .outer_margin(egui::Margin::same(12.0))
+            .outer_margin(egui::Margin::symmetric(12.0, 8.0))
+            .shadow(egui::epaint::Shadow {
+                offset: [0.0, 2.0].into(),
+                blur: 8.0,
+                spread: 0.0,
+                color: egui::Color32::from_black_alpha(16),
+            })
             .show(ui, |ui| {
                 // ---- 卡片顶部 ----
                 ui.horizontal(|ui| {
@@ -565,7 +578,7 @@ impl AtomcodeSwitchApp {
 
                 // 进度条
                 let progress = acc.usage_percent / 100.0;
-                let bar_height = 8.0;
+                let bar_height = 6.0;
                 let available_width = ui.available_width();
                 let (rect, _) = ui.allocate_exact_size(
                     egui::vec2(available_width, bar_height + 4.0),
@@ -575,7 +588,7 @@ impl AtomcodeSwitchApp {
                     rect.min + egui::vec2(0.0, 2.0),
                     rect.max - egui::vec2(0.0, 2.0),
                 );
-                ui.painter().rect_filled(bar_rect, 4.0, GITHUB_PROGRESS_BG);
+                ui.painter().rect_filled(bar_rect, 3.0, GITHUB_PROGRESS_BG);
                 let fill_width = bar_rect.width() * progress.min(1.0);
                 if fill_width > 0.0 {
                     let fill_rect = egui::Rect::from_min_max(
@@ -583,17 +596,18 @@ impl AtomcodeSwitchApp {
                         egui::pos2(bar_rect.min.x + fill_width, bar_rect.max.y),
                     );
                     ui.painter()
-                        .rect_filled(fill_rect, 4.0, theme::progress_bar_color(acc.usage_percent));
+                        .rect_filled(fill_rect, 3.0, theme::progress_bar_color(acc.usage_percent));
                 }
 
                 ui.add_space(6.0);
 
                 // ---- 卡片底部 ----
                 ui.horizontal(|ui| {
+                    let (reset_text, reset_color) = self.format_reset_countdown(&acc.reset_time);
                     ui.label(
-                        egui::RichText::new(self.format_reset_countdown(&acc.reset_time))
+                        egui::RichText::new(reset_text)
                             .size(11.0)
-                            .color(GITHUB_TEXT_SECONDARY),
+                            .color(reset_color),
                     );
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         ui.label(
@@ -658,7 +672,20 @@ impl AtomcodeSwitchApp {
             .resizable(false)
             .collapsible(false)
             .default_pos([200.0, 150.0])
-            .default_size([420.0, 280.0])
+            .default_size([440.0, 300.0])
+            .frame(
+                egui::Frame::default()
+                    .fill(egui::Color32::WHITE)
+                    .rounding(12.0)
+                    .inner_margin(egui::Margin::symmetric(20.0, 16.0))
+                    .stroke(egui::Stroke::new(1.0, GITHUB_BORDER))
+                    .shadow(egui::epaint::Shadow {
+                        offset: [0.0, 8.0].into(),
+                        blur: 24.0,
+                        spread: 0.0,
+                        color: egui::Color32::from_black_alpha(32),
+                    })
+            )
             .show(ctx, |ui| {
                 ui.add_space(8.0);
 
@@ -898,8 +925,8 @@ impl AtomcodeSwitchApp {
         }
     }
 
-    /// 从重置时间实时计算倒计时，支持 YYYY-MM-DD HH:MM 和旧 HH:MM 格式
-    fn format_reset_countdown(&self, reset_time: &str) -> String {
+    /// 从重置时间实时计算倒计时，返回 (文本, 颜色)
+    fn format_reset_countdown(&self, reset_time: &str) -> (String, egui::Color32) {
         let trimmed = reset_time.trim();
         let now = chrono::Local::now();
 
@@ -909,16 +936,17 @@ impl AtomcodeSwitchApp {
                 let target = target_dt.and_local_timezone(chrono::Local).unwrap();
                 let diff_secs = (target - now).num_seconds();
                 if diff_secs < 0 {
-                    return self.i18n.t1("card_reset_label", trimmed);
+                    return (self.i18n.t1("card_reset_expired", trimmed), GITHUB_YELLOW);
                 }
                 let diff = diff_secs as u64;
                 let minutes = diff / 60;
                 let seconds = diff % 60;
-                if diff >= 3600 {
-                    return self.i18n.t4("card_reset_countdown_h", trimmed, &(diff / 3600).to_string(), &(minutes % 60).to_string(), &seconds.to_string());
+                let text = if diff >= 3600 {
+                    self.i18n.t4("card_reset_countdown_h", trimmed, &(diff / 3600).to_string(), &(minutes % 60).to_string(), &seconds.to_string())
                 } else {
-                    return self.i18n.t3("card_reset_countdown", trimmed, &minutes.to_string(), &seconds.to_string());
-                }
+                    self.i18n.t3("card_reset_countdown", trimmed, &minutes.to_string(), &seconds.to_string())
+                };
+                return (text, GITHUB_TEXT_SECONDARY);
             }
         }
 
@@ -933,19 +961,20 @@ impl AtomcodeSwitchApp {
                     let diff = if target_secs > now_secs {
                         target_secs - now_secs
                     } else {
-                        target_secs + 86400 - now_secs
+                        return (self.i18n.t1("card_reset_expired", trimmed), GITHUB_YELLOW);
                     };
                     let minutes = diff / 60;
                     let seconds = diff % 60;
-                    if diff >= 3600 {
-                        return self.i18n.t4("card_reset_countdown_h", trimmed, &(diff / 3600).to_string(), &(minutes % 60).to_string(), &seconds.to_string());
+                    let text = if diff >= 3600 {
+                        self.i18n.t4("card_reset_countdown_h", trimmed, &(diff / 3600).to_string(), &(minutes % 60).to_string(), &seconds.to_string())
                     } else {
-                        return self.i18n.t3("card_reset_countdown", trimmed, &minutes.to_string(), &seconds.to_string());
-                    }
+                        self.i18n.t3("card_reset_countdown", trimmed, &minutes.to_string(), &seconds.to_string())
+                    };
+                    return (text, GITHUB_TEXT_SECONDARY);
                 }
             }
         }
 
-        self.i18n.t1("card_reset_label", reset_time)
+        (self.i18n.t1("card_reset_label", reset_time), GITHUB_TEXT_SECONDARY)
     }
 }

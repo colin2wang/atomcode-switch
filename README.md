@@ -11,7 +11,7 @@ A desktop GUI tool for managing multiple AtomCode accounts and switching between
 - **Internationalization** – Built-in Chinese and English support. Toggle between languages instantly via the toolbar button (中/EN). Language preference is persisted across sessions.
 - **Multi-Account Management** – Import, view, and manage multiple AtomCode accounts in one place.
 - **One-Click Switching** – Switch between accounts instantly. The tool writes the selected account's `auth.toml` file to the AtomCode directory.
-- **Usage Monitoring** – See each account's usage percentage, plan name, remaining days, and reset time (with accurate cross-day countdown) at a glance.
+- **Usage Monitoring** – See each account's usage percentage, plan name, remaining days, and reset time (with accurate cross-day countdown) at a glance. Expired reset times are highlighted in yellow with a "please update" prompt.
 - **Auto & Manual Info Update** – Click "Update Login Info" on the active account card to open the update dialog. Either paste `/login` output manually, or click "自动获取" to run `atomcode login` in a hidden window and auto-fill the output — both use the same "解析并更新" button to extract plan, usage, remaining days, and reset time.
 - **Auto-Switch Rules** – Set a usage threshold. When the active account exceeds it, the tool automatically switches to the lowest-usage valid account.
 - **Custom AtomCode Directory** – Supports custom `auth.toml` storage locations (useful for WSL or non-default setups).
@@ -102,7 +102,7 @@ If your AtomCode `auth.toml` is stored in a non-default location (e.g., inside a
 | [`main.rs`](src/main.rs) | Thin binary entry point. Loads the window icon, configures viewport, and launches eframe. |
 | **`app/`** | Application core — struct definition, UI rendering, and theme. |
 | [`app/mod.rs`](src/app/mod.rs) | `AtomcodeSwitchApp` struct and constructor. Holds config, i18n, settings state, and dialog fields. |
-| [`app/ui.rs`](src/app/ui.rs) | All UI rendering. `eframe::App::update()`, toolbar, cards, settings window, dialogs, and `format_reset_countdown`. |
+| [`app/ui.rs`](src/app/ui.rs) | All UI rendering. `eframe::App::update()`, toolbar, cards, settings window, dialogs, and `format_reset_countdown` (returns `(String, Color32)` — yellow for expired, gray for active). |
 | [`app/theme.rs`](src/app/theme.rs) | GitHub-style light theme, color constants, Chinese font auto-discovery, and style setup. |
 | **`ops/`** | Business operations — account CRUD, auto-switch, login parsing, and auto-fetch. |
 | [`ops/account_ops.rs`](src/ops/account_ops.rs) | Account CRUD + `/login` parser. Sync, switch, import, delete, auto-switch, and `apply_parsed_fields`. |
@@ -112,7 +112,7 @@ If your AtomCode `auth.toml` is stored in a non-default location (e.g., inside a
 | [`io/atomcode_io.rs`](src/io/atomcode_io.rs) | Low-level auth.toml I/O. `read_current_auth` / `write_auth` / `clear_auth` with custom directory support. |
 | **`i18n/`** | Internationalization — string lookup and language definitions. |
 | [`i18n/mod.rs`](src/i18n/mod.rs) | `I18n` struct with `t0`–`t4` parameterized string helpers. |
-| [`i18n/lang/`](src/i18n/lang/) | Language definitions. Each language = one `.rs` file with `pub fn get(key) -> &str`. |
+| [`i18n/lang/`](src/i18n/lang/) | Language definitions. Each language = one `.rs` file with `pub fn get(key) -> &str`. Includes `card_reset_expired` for the expired countdown state. |
 | [`models.rs`](src/models.rs) | Data structures: `AuthToml`, `User`, `AppConfig`, `ManagedAccount`, `AutoSwitchRules`. |
 | [`build.rs`](build.rs) | Build script that embeds `atomcode.ico` into the Windows `.exe`. |
 
