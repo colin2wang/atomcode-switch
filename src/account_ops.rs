@@ -2,7 +2,7 @@
 
 use crate::models::ManagedAccount;
 use crate::{atomcode_io, config_io};
-use std::time::{SystemTime, UNIX_EPOCH};
+use chrono::Timelike;
 
 use crate::app::AtomcodeSwitchApp;
 
@@ -118,20 +118,34 @@ impl AtomcodeSwitchApp {
 
     // ---- 时间工具 ----
 
-    /// 获取当前本地时间字符串 (HH:MM)
+    /// 获取当前本地时间字符串 (YYYY-MM-DD HH:MM)
     pub fn current_time_str() -> String {
-        chrono::Local::now().format("%H:%M").to_string()
+        chrono::Local::now().format("%Y-%m-%d %H:%M").to_string()
     }
 
-    /// 生成默认重置时间（当前时间 + 1小时），仅返回 HH:MM 格式
+    /// 生成默认重置时间（当前时间 + 1小时），返回 YYYY-MM-DD HH:MM 格式
     pub fn default_reset_time() -> String {
-        let secs = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
-        let now_mins = (secs / 60) % 1440;
-        let reset_mins = (now_mins + 60) % 1440;
-        format!("{:02}:{:02}", reset_mins / 60, reset_mins % 60)
+        let target = chrono::Local::now() + chrono::Duration::hours(1);
+        target.format("%Y-%m-%d %H:%M").to_string()
+    }
+
+    /// 根据今天的日期和 HH:MM 组合完整重置时间
+    /// 若该 HH:MM 今天已过，则视为明天
+    fn combine_reset_datetime(today: &str, hm: &str, now: chrono::DateTime<chrono::Local>) -> String {
+        let parts: Vec<&str> = hm.split(':').collect();
+        let h: u32 = parts.get(0).and_then(|s| s.parse().ok()).unwrap_or(0);
+        let m: u32 = parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(0);
+
+        let target_secs = h * 3600 + m * 60;
+        let now_secs = now.hour() * 3600 + now.minute() * 60 + now.second();
+
+        let date = if target_secs > now_secs {
+            today.to_string()
+        } else {
+            (now + chrono::Duration::days(1)).format("%Y-%m-%d").to_string()
+        };
+
+        format!("{} {}", date, hm)
     }
 
     // ---- /login 输出解析 ----
@@ -272,17 +286,21 @@ impl AtomcodeSwitchApp {
         // ---- 重置时间 ----
         // 中文：重置于 21:04 (in ...)
         // 英文：resets 21:04 (in ...)
+        let now = chrono::Local::now();
+        let today = now.format("%Y-%m-%d").to_string();
         let mut reset_found = false;
         for line in text.lines() {
             if line.contains("重置于") {
                 if let Some(after) = line.split("重置于").nth(1) {
                     let raw = after.trim().to_string();
                     // 提取 HH:MM 部分（前5个字符）
-                    acc.reset_time = if raw.len() >= 5 && raw.as_bytes()[2] == b':' {
+                    let hm = if raw.len() >= 5 && raw.as_bytes()[2] == b':' {
                         raw[..5].to_string()
                     } else {
                         raw
                     };
+                    // 组合日期和时间，若重置时间已过则视为明天
+                    acc.reset_time = Self::combine_reset_datetime(&today, &hm, now);
                 }
                 reset_found = true;
                 break;
@@ -294,11 +312,12 @@ impl AtomcodeSwitchApp {
                     if let Some(after) = line.split("resets").nth(1) {
                         let raw = after.trim().to_string();
                         // 提取 HH:MM 部分（前5个字符）
-                        acc.reset_time = if raw.len() >= 5 && raw.as_bytes()[2] == b':' {
+                        let hm = if raw.len() >= 5 && raw.as_bytes()[2] == b':' {
                             raw[..5].to_string()
                         } else {
                             raw
                         };
+                        acc.reset_time = Self::combine_reset_datetime(&today, &hm, now);
                     }
                     break;
                 }

@@ -897,36 +897,54 @@ impl AtomcodeSwitchApp {
         }
     }
 
-    /// 从 HH:MM 格式的重置时间实时计算倒计时，使用 i18n 字符串
+    /// 从重置时间实时计算倒计时，支持 YYYY-MM-DD HH:MM 和旧 HH:MM 格式
     fn format_reset_countdown(&self, reset_time: &str) -> String {
         let trimmed = reset_time.trim();
-        if trimmed.len() < 5 || trimmed.as_bytes()[2] != b':' {
-            return self.i18n.t1("card_reset_label", reset_time);
-        }
-
-        let (h_str, m_str) = trimmed.split_at(2);
-        let m_str = &m_str[1..];
-
-        let target_h: u32 = h_str.parse().unwrap_or(0);
-        let target_m: u32 = m_str.parse().unwrap_or(0);
-        let target_secs = target_h * 3600 + target_m * 60;
-
         let now = chrono::Local::now();
-        let now_secs = now.hour() as u32 * 3600 + now.minute() as u32 * 60 + now.second() as u32;
 
-        let diff = if target_secs > now_secs {
-            target_secs - now_secs
-        } else {
-            target_secs + 86400 - now_secs
-        };
-
-        let minutes = diff / 60;
-        let seconds = diff % 60;
-
-        if diff >= 3600 {
-            self.i18n.t4("card_reset_countdown_h", trimmed, &(diff / 3600).to_string(), &(minutes % 60).to_string(), &seconds.to_string())
-        } else {
-            self.i18n.t3("card_reset_countdown", trimmed, &minutes.to_string(), &seconds.to_string())
+        // 尝试解析 YYYY-MM-DD HH:MM 格式
+        if trimmed.len() >= 16 && trimmed.as_bytes()[4] == b'-' && trimmed.as_bytes()[7] == b'-' && trimmed.as_bytes()[10] == b' ' && trimmed.as_bytes()[13] == b':' {
+            if let Ok(target_dt) = chrono::NaiveDateTime::parse_from_str(trimmed, "%Y-%m-%d %H:%M") {
+                let target = target_dt.and_local_timezone(chrono::Local).unwrap();
+                let diff_secs = (target - now).num_seconds();
+                if diff_secs < 0 {
+                    return self.i18n.t1("card_reset_label", trimmed);
+                }
+                let diff = diff_secs as u64;
+                let minutes = diff / 60;
+                let seconds = diff % 60;
+                if diff >= 3600 {
+                    return self.i18n.t4("card_reset_countdown_h", trimmed, &(diff / 3600).to_string(), &(minutes % 60).to_string(), &seconds.to_string());
+                } else {
+                    return self.i18n.t3("card_reset_countdown", trimmed, &minutes.to_string(), &seconds.to_string());
+                }
+            }
         }
+
+        // 兼容旧的 HH:MM 格式
+        if trimmed.len() >= 5 && trimmed.as_bytes()[2] == b':' {
+            let (h_str, m_str) = trimmed.split_at(2);
+            let m_str = &m_str[1..];
+            if let Ok(target_h) = h_str.parse::<u32>() {
+                if let Ok(target_m) = m_str.parse::<u32>() {
+                    let target_secs = target_h * 3600 + target_m * 60;
+                    let now_secs = now.hour() * 3600 + now.minute() * 60 + now.second();
+                    let diff = if target_secs > now_secs {
+                        target_secs - now_secs
+                    } else {
+                        target_secs + 86400 - now_secs
+                    };
+                    let minutes = diff / 60;
+                    let seconds = diff % 60;
+                    if diff >= 3600 {
+                        return self.i18n.t4("card_reset_countdown_h", trimmed, &(diff / 3600).to_string(), &(minutes % 60).to_string(), &seconds.to_string());
+                    } else {
+                        return self.i18n.t3("card_reset_countdown", trimmed, &minutes.to_string(), &seconds.to_string());
+                    }
+                }
+            }
+        }
+
+        self.i18n.t1("card_reset_label", reset_time)
     }
 }

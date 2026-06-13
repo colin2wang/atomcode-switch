@@ -1,5 +1,16 @@
 # Change History
 
+## v0.1.5 (2026-06-13)
+
+### Fixed
+- **Reset Time Cross-Day Calculation** — `reset_time` now stores `YYYY-MM-DD HH:MM` instead of `HH:MM`, fixing incorrect countdown intervals when the reset time crosses midnight. Old `HH:MM` config values are handled gracefully as a fallback.
+
+### Changed
+- **`current_time_str()`** — Returns `YYYY-MM-DD HH:MM` format (was `HH:MM`), providing full timestamp for `last_updated`.
+- **`default_reset_time()`** — Returns `YYYY-MM-DD HH:MM` format, combining current date with target time.
+- **New `combine_reset_datetime()`** — Helper that combines today's date with a parsed `HH:MM` value; automatically advances to tomorrow if the time has already passed today.
+- **`format_reset_countdown()`** — Now parses `YYYY-MM-DD HH:MM` and computes the exact `target - now` diff instead of guessing "next day" by adding 86400s. Falls back to legacy `HH:MM` parsing for old configs.
+
 ## v0.1.4 (2026-06-12)
 
 ### Added
