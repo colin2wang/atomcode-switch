@@ -20,74 +20,75 @@ impl eframe::App for AtomcodeSwitchApp {
         egui::TopBottomPanel::top("toolbar")
             .exact_height(44.0)
             .show(ctx, |ui| {
-                ui.horizontal(|ui| {
-                    // 左侧：状态消息
-                    ui.add_space(8.0);
-                    ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                ui.allocate_ui_with_layout(
+                    egui::vec2(ui.available_width(), ui.available_height()),
+                    egui::Layout::left_to_right(egui::Align::Center),
+                    |ui| {
+                        // 左侧：状态消息
+                        ui.add_space(8.0);
                         ui.label(
                             egui::RichText::new(&self.status_message)
-                                .size(12.0)
+                                .size(13.0)
                                 .color(GITHUB_TEXT_SECONDARY),
                         );
-                    });
 
-                    // 右侧按钮组
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ui.add_space(8.0);
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            ui.add_space(8.0);
 
-                        // 语言切换
-                        let current_lang = self.i18n.language();
-                        let lang_label = match current_lang {
-                            crate::i18n::lang::Language::ZhCn => "EN",
-                            crate::i18n::lang::Language::EnUs => "中",
-                        };
-                        if ui
-                            .add(
-                                style_button_borderless(
-                                    egui::Button::new(egui::RichText::new(lang_label).size(13.0).color(GITHUB_TEXT_PRIMARY))
-                                )
-                            )
-                            .clicked()
-                        {
-                            let new_lang = match current_lang {
-                                crate::i18n::lang::Language::ZhCn => crate::i18n::lang::Language::EnUs,
-                                crate::i18n::lang::Language::EnUs => crate::i18n::lang::Language::ZhCn,
+                            // 语言切换
+                            let current_lang = self.i18n.language();
+                            let lang_label = match current_lang {
+                                crate::i18n::lang::Language::ZhCn => "EN",
+                                crate::i18n::lang::Language::EnUs => "中",
                             };
-                            self.i18n = crate::i18n::I18n::load(new_lang);
-                            self.config.language = new_lang.as_str().to_string();
-                            config_io::save_config(&self.config);
-                            self.status_message = self.i18n.t0("status_ready");
-                        }
-
-                        // 设置
-                        if ui
-                            .add(
-                                style_button_borderless(
-                                    egui::Button::new(egui::RichText::new(self.i18n.t0("toolbar_settings")).size(13.0).color(GITHUB_TEXT_PRIMARY))
-                                )
-                            )
-                            .clicked()
-                        {
-                            self.show_settings = !self.show_settings;
-                        }
-
-                        // 同步登录信息
-                        if ui
-                            .add(
-                                style_button_borderless(
-                                    egui::Button::new(
-                                        egui::RichText::new(self.i18n.t0("toolbar_sync")).size(13.0).color(GITHUB_TEXT_PRIMARY),
+                            if ui
+                                .add(
+                                    style_button_borderless(
+                                        egui::Button::new(egui::RichText::new(lang_label).size(13.0).color(GITHUB_TEXT_PRIMARY))
                                     )
                                 )
-                            )
-                            .clicked()
-                        {
-                            self.import_current_auth();
-                        }
+                                .clicked()
+                            {
+                                let new_lang = match current_lang {
+                                    crate::i18n::lang::Language::ZhCn => crate::i18n::lang::Language::EnUs,
+                                    crate::i18n::lang::Language::EnUs => crate::i18n::lang::Language::ZhCn,
+                                };
+                                self.i18n = crate::i18n::I18n::load(new_lang);
+                                self.config.language = new_lang.as_str().to_string();
+                                config_io::save_config(&self.config);
+                                self.status_message = self.i18n.t0("status_ready");
+                            }
 
-                        ui.add_space(4.0);
-                    });
-                });
+                            // 设置
+                            if ui
+                                .add(
+                                    style_button_borderless(
+                                        egui::Button::new(egui::RichText::new(self.i18n.t0("toolbar_settings")).size(13.0).color(GITHUB_TEXT_PRIMARY))
+                                    )
+                                )
+                                .clicked()
+                            {
+                                self.show_settings = !self.show_settings;
+                            }
+
+                            // 同步登录信息
+                            if ui
+                                .add(
+                                    style_button_borderless(
+                                        egui::Button::new(
+                                            egui::RichText::new(self.i18n.t0("toolbar_sync")).size(13.0).color(GITHUB_TEXT_PRIMARY),
+                                        )
+                                    )
+                                )
+                                .clicked()
+                            {
+                                self.import_current_auth();
+                            }
+
+                            ui.add_space(4.0);
+                        });
+                    },
+                );
             });
 
         // ============ 底部状态栏 ============
