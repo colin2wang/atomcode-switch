@@ -350,7 +350,8 @@ impl eframe::App for AtomcodeSwitchApp {
                             } else {
                                 match self.parse_login_output_and_update(&text) {
                                     Ok(()) => {
-                                        self.status_message = self.i18n.t0("status_updated");
+                                        // 解析成功后自动同步磁盘上的登录信息
+                                        self.import_current_auth();
                                     }
                                     Err(e) => {
                                         self.status_message = self.i18n.t1("status_update_failed", &e);
@@ -414,7 +415,7 @@ impl AtomcodeSwitchApp {
             .fill(egui::Color32::WHITE)
             .rounding(10.0)
             .stroke(egui::Stroke::new(
-                1.0,
+                1.0_f32,
                 if is_active { GITHUB_BLUE } else { GITHUB_BORDER },
             ))
             .inner_margin(egui::Margin::symmetric(20.0, 16.0))
@@ -498,7 +499,7 @@ impl AtomcodeSwitchApp {
                                     )
                                     .rounding(4.0)
                                     .fill(egui::Color32::from_rgb(220, 255, 220))
-                                    .stroke(egui::Stroke::new(1.0, GITHUB_GREEN)),
+                                    .stroke(egui::Stroke::new(1.0_f32, GITHUB_GREEN)),
                                 );
                                 ui.add_space(6.0);
                                 if ui
@@ -510,12 +511,16 @@ impl AtomcodeSwitchApp {
                                         )
                                         .rounding(4.0)
                                         .fill(egui::Color32::WHITE)
-                                        .stroke(egui::Stroke::new(1.0, GITHUB_BORDER)),
+                                        .stroke(egui::Stroke::new(1.0_f32, GITHUB_BORDER)),
                                     )
                                     .clicked()
                                 {
                                     self.show_manual_update = true;
                                     self.manual_update_text.clear();
+                                    // 打开窗口时自动触发一次获取
+                                    self.is_auto_updating = false;
+                                    self.auto_update_rx = None;
+                                    self.start_auto_update();
                                 }
                             });
                         }
@@ -679,7 +684,7 @@ impl AtomcodeSwitchApp {
                     .fill(egui::Color32::WHITE)
                     .rounding(12.0)
                     .inner_margin(egui::Margin::symmetric(20.0, 16.0))
-                    .stroke(egui::Stroke::new(1.0, GITHUB_BORDER))
+                    .stroke(egui::Stroke::new(1.0_f32, GITHUB_BORDER))
                     .shadow(egui::epaint::Shadow {
                         offset: [0.0, 8.0].into(),
                         blur: 24.0,

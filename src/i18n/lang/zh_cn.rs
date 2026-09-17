@@ -51,12 +51,12 @@ pub fn get(key: &str) -> &str {
 
         // ======== 更新信息对话框 ========
         "update_title" => "更新账号信息",
-        "update_desc" => "可将下方文本框清空，点击「自动获取」自动填入：",
-        "update_auto_fetch" => "自动获取",
+        "update_desc" => "打开窗口后自动获取登录信息，也可点击「重新获取」再次获取：",
+        "update_auto_fetch" => "重新获取",
         "update_fetching" => "获取中...",
         "update_cancel" => "取消",
         "update_parse" => "解析并更新",
-        "update_hint" => "在此粘贴 /login 的输出，或点击上方「自动获取」自动填入...",
+        "update_hint" => "在此粘贴 /login 的输出，或点击上方「重新获取」再次获取...",
 
         // ======== 删除确认对话框 ========
         "delete_confirm_title" => "确认删除",

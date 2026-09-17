@@ -1,5 +1,11 @@
 # Change History
 
+## v0.1.6 (2026-09-17)
+
+### Changed
+- **Auto-fetch information when opening the update window** — Clicking the Update Info button on the active account card opens the update window and automatically triggers information fetching (executes `atomcode login` in a hidden window). The original Auto-fetch button is renamed to Re-fetch for manually re-fetching information. Updated window descriptions, hint texts and module documentation comments for both zh_cn and en_us locales.
+- **Automatically synchronize login information after parsing** — Clicking Parse and Update in the update window will automatically invoke the same logic as the Sync Login Info button on the toolbar after successful parsing (`import_current_auth()`), reloading `auth.toml` from disk and refreshing account data. Error handling paths (empty input, no active account, parsing failure) remain unchanged. The status bar displays synchronization results (e.g. "Import succeeded: xxx"), replacing the old prompt "Account info updated".
+
 ## v0.1.5 (2026-06-13)
 
 ### Fixed

@@ -51,12 +51,12 @@ pub fn get(key: &str) -> &str {
 
         // ======== Update Dialog ========
         "update_title" => "Update Account Info",
-        "update_desc" => "Clear the text area and click \"Auto Fetch\" to fill automatically:",
-        "update_auto_fetch" => "Auto Fetch",
+        "update_desc" => "Login info is fetched automatically on open; click \"Re-fetch\" to fetch again:",
+        "update_auto_fetch" => "Re-fetch",
         "update_fetching" => "Fetching...",
         "update_cancel" => "Cancel",
         "update_parse" => "Parse & Update",
-        "update_hint" => "Paste /login output here, or click \"Auto Fetch\" above...",
+        "update_hint" => "Paste /login output here, or click \"Re-fetch\" above...",
 
         // ======== Delete Confirmation ========
         "delete_confirm_title" => "Confirm Delete",
