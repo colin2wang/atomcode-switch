@@ -252,17 +252,83 @@ impl eframe::App for AtomcodeSwitchApp {
                 });
         }
 
-        // ============ 更新信息对话框 ============
+        // ============ 更新信息对话框（独立子窗口，可浮动于主窗口之外） ============
         if self.show_manual_update {
-            let mut open = true;
+            self.show_manual_update_viewport(ctx);
+        }
+    }
+}
 
-            egui::Window::new(self.i18n.t0("update_title"))
-                .open(&mut open)
-                .resizable(true)
-                .collapsible(false)
-                .default_pos([150.0, 120.0])
-                .default_size([520.0, 380.0])
-                .show(ctx, |ui| {
+impl AtomcodeSwitchApp {
+    /// 「更新账号信息」独立子视口：作为真正的系统窗口浮动于主窗口之外，
+    /// 共享主窗口的 egui Context（字体/主题自动继承）。
+    fn show_manual_update_viewport(&mut self, ctx: &egui::Context) {
+        let title = self.i18n.t0("update_title");
+
+        ctx.show_viewport_immediate(
+            egui::ViewportId(egui::Id::new("manual_update_window")),
+            egui::ViewportBuilder::default()
+                .with_title(title.clone())
+                .with_inner_size([520.0, 380.0])
+                .with_min_inner_size([420.0, 300.0]),
+            |ctx, class| {
+                assert!(class == egui::ViewportClass::Immediate);
+
+                // 底部按钮面板：先声明，保证始终贴底且可见
+                egui::TopBottomPanel::bottom("manual_update_buttons")
+                    .frame(egui::Frame::central_panel(&ctx.style()).inner_margin(
+                        egui::Margin { left: 12.0, right: 12.0, top: 4.0, bottom: 12.0 },
+                    ))
+                    .show(ctx, |ui| {
+                        ui.horizontal(|ui| {
+                            let has_text = !self.manual_update_text.trim().is_empty();
+                            if ui
+                                .add_enabled(
+                                    has_text,
+                                    egui::Button::new(
+                                        egui::RichText::new(self.i18n.t0("update_parse"))
+                                            .size(13.0)
+                                            .color(egui::Color32::WHITE),
+                                    )
+                                    .rounding(4.0)
+                                    .fill(if has_text { GITHUB_BLUE } else { GITHUB_BORDER }),
+                                )
+                                .clicked()
+                            {
+                                let text = std::mem::take(&mut self.manual_update_text);
+                                if text.trim().is_empty() {
+                                    self.status_message = self.i18n.t0("status_paste_empty");
+                                } else if self.config.active_account_id.is_none() {
+                                    self.status_message = self.i18n.t0("status_no_active_import");
+                                } else {
+                                    match self.parse_login_output_and_update(&text) {
+                                        Ok(()) => {
+                                            // 解析成功后自动同步磁盘上的登录信息
+                                            self.import_current_auth();
+                                        }
+                                        Err(e) => {
+                                            self.status_message = self.i18n.t1("status_update_failed", &e);
+                                        }
+                                    }
+                                }
+                                self.show_manual_update = false;
+                            }
+
+                            ui.with_layout(
+                                egui::Layout::right_to_left(egui::Align::Center),
+                                |ui| {
+                                    if ui.button(self.i18n.t0("btn_cancel")).clicked() {
+                                        self.show_manual_update = false;
+                                    }
+                                },
+                            );
+                        });
+                    });
+
+                // 中间内容区：描述行 + 占满剩余空间的文本框
+                egui::CentralPanel::default()
+                    .frame(egui::Frame::central_panel(&ctx.style()).inner_margin(12.0))
+                    .show(ctx, |ui| {
                     ui.horizontal(|ui| {
                         ui.label(
                             egui::RichText::new(self.i18n.t0("update_desc"))
@@ -313,8 +379,9 @@ impl eframe::App for AtomcodeSwitchApp {
 
                     ui.add_space(8.0);
 
+                    // 文本框占据剩余全部空间，按钮行贴底
                     egui::ScrollArea::vertical()
-                        .max_height(200.0)
+                        .auto_shrink(false)
                         .show(ui, |ui| {
                             ui.add_sized(
                                 ui.available_size(),
@@ -324,58 +391,14 @@ impl eframe::App for AtomcodeSwitchApp {
                                     .desired_width(f32::INFINITY),
                             );
                         });
-
-                    ui.add_space(10.0);
-
-                    ui.horizontal(|ui| {
-                        let has_text = !self.manual_update_text.trim().is_empty();
-                        if ui
-                            .add_enabled(
-                                has_text,
-                                egui::Button::new(
-                                    egui::RichText::new(self.i18n.t0("update_parse"))
-                                        .size(13.0)
-                                        .color(egui::Color32::WHITE),
-                                )
-                                .rounding(4.0)
-                                .fill(if has_text { GITHUB_BLUE } else { GITHUB_BORDER }),
-                            )
-                            .clicked()
-                        {
-                            let text = std::mem::take(&mut self.manual_update_text);
-                            if text.trim().is_empty() {
-                                self.status_message = self.i18n.t0("status_paste_empty");
-                            } else if self.config.active_account_id.is_none() {
-                                self.status_message = self.i18n.t0("status_no_active_import");
-                            } else {
-                                match self.parse_login_output_and_update(&text) {
-                                    Ok(()) => {
-                                        // 解析成功后自动同步磁盘上的登录信息
-                                        self.import_current_auth();
-                                    }
-                                    Err(e) => {
-                                        self.status_message = self.i18n.t1("status_update_failed", &e);
-                                    }
-                                }
-                            }
-                            self.show_manual_update = false;
-                        }
-
-                        ui.with_layout(
-                            egui::Layout::right_to_left(egui::Align::Center),
-                            |ui| {
-                                if ui.button(self.i18n.t0("btn_cancel")).clicked() {
-                                    self.show_manual_update = false;
-                                }
-                            },
-                        );
                     });
-                });
 
-            if !open {
-                self.show_manual_update = false;
-            }
-        }
+                // 点击系统标题栏 X 时关闭子窗口
+                if ctx.input(|i| i.viewport().close_requested()) {
+                    self.show_manual_update = false;
+                }
+            },
+        );
     }
 }
 
