@@ -46,6 +46,7 @@ pub fn get(key: &str) -> &str {
         "settings_enable_auto_switch" => "Enable auto-switch",
         "settings_usage_exceeds" => "Switch when usage exceeds",
         "settings_auto_switch_to" => "to the lowest-usage account",
+        "settings_auto_update_on_switch_expired" => "Auto-open update window when switching to an expired account",
         "btn_confirm" => "OK",
         "btn_cancel" => "Cancel",
 

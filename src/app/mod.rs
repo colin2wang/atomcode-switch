@@ -12,6 +12,8 @@ pub struct SettingsState {
     pub atomcode_dir: String,
     pub auto_switch_enabled: bool,
     pub max_usage_percent: f32,
+    /// 切换时过期账号自动更新
+    pub auto_update_on_switch_expired: bool,
 }
 
 /// 主应用结构体
@@ -27,6 +29,8 @@ pub struct AtomcodeSwitchApp {
     pub manual_update_text: String,
     pub is_auto_updating: bool,
     pub auto_update_rx: Option<std::sync::mpsc::Receiver<String>>,
+    /// 自动获取完成后是否自动解析并更新（切换过期账号时触发）
+    pub auto_parse_pending: bool,
 }
 
 impl AtomcodeSwitchApp {
@@ -50,6 +54,7 @@ impl AtomcodeSwitchApp {
             manual_update_text: String::new(),
             is_auto_updating: false,
             auto_update_rx: None,
+            auto_parse_pending: false,
         };
 
         app.status_message = app.i18n.t0("status_ready");

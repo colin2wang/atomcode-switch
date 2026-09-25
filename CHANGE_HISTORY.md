@@ -1,5 +1,15 @@
 # Change History
 
+## v0.1.7 (2026-09-25)
+
+### Added
+- **Auto-update on switching to an expired account** — New setting **"Auto-open update window when switching to an expired account"** (default: off) under Settings → Auto-Switch Rules. When enabled and the target account's reset time has already passed, switching automatically opens the Update Account Info window, fetches via `atomcode login`, parses, and applies the update in one step. The expiry check (`is_account_expired()`) supports both the current `YYYY-MM-DD HH:MM` format and the legacy `HH:MM` fallback, consistent with the card countdown logic.
+- **`auto_update_on_switch_expired` config field** — Persisted in `atomcode-accounts.yaml` with `#[serde(default)]`, so existing config files remain compatible (defaults to `false`).
+
+### Changed
+- **Auto parse after fetch in the update window** — Fetching login info (on window open, on Re-fetch, or when triggered by an expired-account switch) no longer waits for the user to click Parse and Update. Once the fetch completes, the output is parsed and applied automatically; on success the window closes by itself.
+- **Failed parse keeps the window open** — If parsing/updating fails (manually or automatically), the Update Account Info window stays open, the error is shown in the status bar, and the user can click Re-fetch (which again auto-parses) or paste the output and retry Parse and Update.
+
 ## v0.1.6 (2026-09-17)
 
 ### Changed

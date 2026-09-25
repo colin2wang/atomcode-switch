@@ -55,20 +55,67 @@ impl AtomcodeSwitchApp {
         }
     }
 
-    /// 写入 auth.toml 并切换激活账号
+    /// 判断账号信息是否已过期（重置时间已过且未解析出新数据）
+    pub fn is_account_expired(&self, acc: &ManagedAccount) -> bool {
+        let trimmed = acc.reset_time.trim();
+        let now = chrono::Local::now();
+
+        // YYYY-MM-DD HH:MM 格式
+        if trimmed.len() >= 16
+            && trimmed.as_bytes()[4] == b'-'
+            && trimmed.as_bytes()[7] == b'-'
+            && trimmed.as_bytes()[10] == b' '
+            && trimmed.as_bytes()[13] == b':'
+        {
+            if let Ok(target_dt) = chrono::NaiveDateTime::parse_from_str(trimmed, "%Y-%m-%d %H:%M") {
+                let target = target_dt.and_local_timezone(chrono::Local).unwrap();
+                return target < now;
+            }
+        }
+
+        // 兼容旧的 HH:MM 格式
+        if trimmed.len() >= 5 && trimmed.as_bytes()[2] == b':' {
+            let (h_str, m_str) = trimmed.split_at(2);
+            let m_str = &m_str[1..];
+            if let (Ok(target_h), Ok(target_m)) = (h_str.parse::<u32>(), m_str.parse::<u32>()) {
+                let target_secs = target_h * 3600 + target_m * 60;
+                let now_secs = now.hour() * 3600 + now.minute() * 60 + now.second();
+                return target_secs <= now_secs;
+            }
+        }
+
+        false
+    }
+
+    /// 切换到账号；若开启了「过期自动更新」且目标账号信息已过期，
+    /// 自动打开更新信息窗口并触发自动获取 + 解析更新
     pub fn switch_to_account(&mut self, id: &str) {
         if let Some(acc) = self.config.accounts.iter().find(|a| a.id == id) {
+            let expired = self.is_account_expired(acc);
             match atomcode_io::write_auth(&self.config.custom_atomcode_dir, &acc.auth_data) {
                 Ok(_) => {
                     self.config.active_account_id = Some(id.to_string());
                     config_io::save_config(&self.config);
                     self.status_message = self.i18n.t1("status_switched", &acc.auth_data.user.name);
+                    if self.config.auto_update_on_switch_expired && expired {
+                        self.open_auto_update_window();
+                    }
                 }
                 Err(e) => {
                     self.status_message = self.i18n.t1("status_switch_failed", &e);
                 }
             }
         }
+    }
+
+    /// 打开更新信息窗口并自动获取，获取完成后自动解析更新
+    pub fn open_auto_update_window(&mut self) {
+        self.show_manual_update = true;
+        self.manual_update_text.clear();
+        self.is_auto_updating = false;
+        self.auto_update_rx = None;
+        self.auto_parse_pending = true;
+        self.start_auto_update();
     }
 
     /// 从当前 auth.toml 导入账号

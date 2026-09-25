@@ -36,6 +36,9 @@ pub struct AppConfig {
     /// 语言设置
     #[serde(default = "default_language")]
     pub language: String,
+    /// 切换账号时若目标账号信息已过期，自动打开更新窗口并自动更新
+    #[serde(default)]
+    pub auto_update_on_switch_expired: bool,
 }
 
 fn default_language() -> String {
@@ -53,6 +56,7 @@ impl Default for AppConfig {
                 max_usage_percent: 95.0,
             },
             language: default_language(),
+            auto_update_on_switch_expired: false,
         }
     }
 }

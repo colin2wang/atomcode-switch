@@ -305,13 +305,14 @@ impl AtomcodeSwitchApp {
                                         Ok(()) => {
                                             // 解析成功后自动同步磁盘上的登录信息
                                             self.import_current_auth();
+                                            self.show_manual_update = false;
                                         }
                                         Err(e) => {
+                                            // 解析失败：保留窗口，可重新获取后再试
                                             self.status_message = self.i18n.t1("status_update_failed", &e);
                                         }
                                     }
                                 }
-                                self.show_manual_update = false;
                             }
 
                             ui.with_layout(
@@ -371,6 +372,8 @@ impl AtomcodeSwitchApp {
                                     .clicked()
                                 {
                                     self.manual_update_text.clear();
+                                    // 重新获取成功后自动解析更新
+                                    self.auto_parse_pending = true;
                                     self.start_auto_update();
                                 }
                             }
@@ -540,9 +543,10 @@ impl AtomcodeSwitchApp {
                                 {
                                     self.show_manual_update = true;
                                     self.manual_update_text.clear();
-                                    // 打开窗口时自动触发一次获取
+                                    // 打开窗口时自动触发一次获取，成功后自动解析更新
                                     self.is_auto_updating = false;
                                     self.auto_update_rx = None;
+                                    self.auto_parse_pending = true;
                                     self.start_auto_update();
                                 }
                             });
@@ -689,6 +693,7 @@ impl AtomcodeSwitchApp {
                 atomcode_dir: self.config.custom_atomcode_dir.clone().unwrap_or_default(),
                 auto_switch_enabled: self.config.auto_switch_rules.enabled,
                 max_usage_percent: self.config.auto_switch_rules.max_usage_percent,
+                auto_update_on_switch_expired: self.config.auto_update_on_switch_expired,
             });
         }
 
@@ -848,6 +853,14 @@ impl AtomcodeSwitchApp {
                         ui.label(self.i18n.t0("settings_auto_switch_to"));
                     });
 
+                    ui.add_space(12.0);
+
+                    // 切换时过期自动更新
+                    ui.checkbox(
+                        &mut state.auto_update_on_switch_expired,
+                        self.i18n.t0("settings_auto_update_on_switch_expired"),
+                    );
+
                     ui.add_space(16.0);
 
                     ui.horizontal(|ui| {
@@ -879,6 +892,7 @@ impl AtomcodeSwitchApp {
                 };
                 self.config.auto_switch_rules.enabled = state.auto_switch_enabled;
                 self.config.auto_switch_rules.max_usage_percent = state.max_usage_percent;
+                self.config.auto_update_on_switch_expired = state.auto_update_on_switch_expired;
                 config_io::save_config(&self.config);
                 self.status_message = self.i18n.t0("status_settings_saved");
             }

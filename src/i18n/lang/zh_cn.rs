@@ -46,6 +46,7 @@ pub fn get(key: &str) -> &str {
         "settings_enable_auto_switch" => "启用自动切换",
         "settings_usage_exceeds" => "用量超过",
         "settings_auto_switch_to" => "时自动切换至用量最低的账号",
+        "settings_auto_update_on_switch_expired" => "切换账号时若信息已过期，自动打开更新窗口并更新",
         "btn_confirm" => "确定",
         "btn_cancel" => "取消",
 
