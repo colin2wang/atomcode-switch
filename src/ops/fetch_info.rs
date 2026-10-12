@@ -83,7 +83,7 @@ impl AtomcodeSwitchApp {
                     if self.auto_parse_pending {
                         // 切换过期账号触发的自动获取：直接解析并更新
                         self.auto_parse_pending = false;
-                        let text = std::mem::take(&mut self.manual_update_text);
+                        let text = self.manual_update_text.clone();
                         if text.trim().is_empty() {
                             self.status_message = self.i18n.t0("status_paste_empty");
                         } else if self.config.active_account_id.is_none() {
@@ -92,6 +92,7 @@ impl AtomcodeSwitchApp {
                             match self.parse_login_output_and_update(&text) {
                                 Ok(()) => {
                                     self.import_current_auth();
+                                    self.manual_update_text.clear();
                                     self.show_manual_update = false;
                                 }
                                 Err(e) => {

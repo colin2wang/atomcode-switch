@@ -295,7 +295,7 @@ impl AtomcodeSwitchApp {
                                 )
                                 .clicked()
                             {
-                                let text = std::mem::take(&mut self.manual_update_text);
+                                let text = self.manual_update_text.clone();
                                 if text.trim().is_empty() {
                                     self.status_message = self.i18n.t0("status_paste_empty");
                                 } else if self.config.active_account_id.is_none() {
@@ -305,6 +305,7 @@ impl AtomcodeSwitchApp {
                                         Ok(()) => {
                                             // 解析成功后自动同步磁盘上的登录信息
                                             self.import_current_auth();
+                                            self.manual_update_text.clear();
                                             self.show_manual_update = false;
                                         }
                                         Err(e) => {
