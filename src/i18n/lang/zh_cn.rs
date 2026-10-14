@@ -33,6 +33,11 @@ pub fn get(key: &str) -> &str {
         "empty_hint" => "点击顶部 \"导入\" 按钮添加当前系统账号",
         "empty_import" => "导入当前系统账号",
 
+        // ======== 排序 ========
+        "sort_none" => "不排序",
+        "sort_reset_time" => "重置时间",
+        "sort_window_remaining" => "窗口余量",
+
         // ======== 设置窗口 ========
         "settings_title" => "设置",
         "settings_export_dir" => "导出目录",

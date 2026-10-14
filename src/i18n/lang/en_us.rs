@@ -33,6 +33,11 @@ pub fn get(key: &str) -> &str {
         "empty_hint" => "Click \"Import\" to add current system account",
         "empty_import" => "Import Current Account",
 
+        // ======== Sorting ========
+        "sort_none" => "Unsorted",
+        "sort_reset_time" => "Reset Time",
+        "sort_window_remaining" => "Window Remaining",
+
         // ======== Settings Window ========
         "settings_title" => "Settings",
         "settings_export_dir" => "Export Directory",

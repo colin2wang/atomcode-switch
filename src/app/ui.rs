@@ -188,11 +188,12 @@ impl eframe::App for AtomcodeSwitchApp {
                     ui.horizontal(|ui| {
                         ui.add_space(20.0);
                         ui.vertical(|ui| {
-                            // 当前使用中的账号指示器
+                            // 当前使用中的账号指示器 + 排序按钮（同一行）
                             self.render_active_indicator(ui);
 
-                            // 账号卡片列表
-                            let accounts = self.config.accounts.clone();
+                            // 账号卡片列表（按当前排序方式排列）
+                            let mut accounts = self.config.accounts.clone();
+                            self.sort_accounts(&mut accounts);
                             let active_id = self.config.active_account_id.clone();
 
                             for acc in &accounts {
@@ -409,11 +410,11 @@ impl AtomcodeSwitchApp {
 // ============ 辅助渲染方法 ============
 
 impl AtomcodeSwitchApp {
-    /// 渲染激活账号指示器
+    /// 渲染激活账号指示器 + 排序按钮（同一行）
     fn render_active_indicator(&mut self, ui: &mut egui::Ui) {
-        if let Some(active_id) = &self.config.active_account_id {
-            if let Some(active_acc) = self.config.accounts.iter().find(|a| &a.id == active_id) {
-                ui.horizontal(|ui| {
+        ui.horizontal(|ui| {
+            if let Some(active_id) = &self.config.active_account_id {
+                if let Some(active_acc) = self.config.accounts.iter().find(|a| &a.id == active_id) {
                     ui.label(
                         egui::RichText::new("\u{25CF}")
                             .size(14.0)
@@ -430,10 +431,60 @@ impl AtomcodeSwitchApp {
                             .size(13.0)
                             .color(GITHUB_TEXT_SECONDARY),
                     );
-                });
-                ui.add_space(12.0);
+                }
             }
-        }
+
+            ui.add_space(16.0);
+            let sort_mode = self.config.sort_mode;
+            let (none_text, reset_text, remaining_text) = (
+                self.i18n.t0("sort_none"),
+                self.i18n.t0("sort_reset_time"),
+                self.i18n.t0("sort_window_remaining"),
+            );
+            if ui
+                .selectable_label(
+                    sort_mode == crate::models::SortMode::None,
+                    egui::RichText::new(&none_text).size(13.0).color(if sort_mode == crate::models::SortMode::None {
+                        GITHUB_BLUE
+                    } else {
+                        GITHUB_TEXT_PRIMARY
+                    }),
+                )
+                .clicked()
+            {
+                self.config.sort_mode = crate::models::SortMode::None;
+                config_io::save_config(&self.config);
+            }
+            if ui
+                .selectable_label(
+                    sort_mode == crate::models::SortMode::WindowRemaining,
+                    egui::RichText::new(&remaining_text).size(13.0).color(if sort_mode == crate::models::SortMode::WindowRemaining {
+                        GITHUB_BLUE
+                    } else {
+                        GITHUB_TEXT_PRIMARY
+                    }),
+                )
+                .clicked()
+            {
+                self.config.sort_mode = crate::models::SortMode::WindowRemaining;
+                config_io::save_config(&self.config);
+            }
+            if ui
+                .selectable_label(
+                    sort_mode == crate::models::SortMode::ResetTime,
+                    egui::RichText::new(&reset_text).size(13.0).color(if sort_mode == crate::models::SortMode::ResetTime {
+                        GITHUB_BLUE
+                    } else {
+                        GITHUB_TEXT_PRIMARY
+                    }),
+                )
+                .clicked()
+            {
+                self.config.sort_mode = crate::models::SortMode::ResetTime;
+                config_io::save_config(&self.config);
+            }
+        });
+        ui.add_space(12.0);
     }
 
     /// 渲染账号卡片
@@ -443,7 +494,7 @@ impl AtomcodeSwitchApp {
             .rounding(10.0)
             .stroke(egui::Stroke::new(
                 1.0_f32,
-                if is_active { GITHUB_BLUE } else { GITHUB_BORDER },
+                if is_active { GITHUB_RED } else { GITHUB_BORDER },
             ))
             .inner_margin(egui::Margin::symmetric(20.0, 16.0))
             .outer_margin(egui::Margin::symmetric(12.0, 8.0))
@@ -1020,5 +1071,53 @@ impl AtomcodeSwitchApp {
         }
 
         (self.i18n.t1("card_reset_label", reset_time), GITHUB_TEXT_SECONDARY)
+    }
+
+    /// 解析重置时间为可排序的值（YYYY-MM-DD HH:MM），无法解析时返回 None
+    fn parse_reset_time_for_sort(reset_time: &str) -> Option<chrono::NaiveDateTime> {
+        chrono::NaiveDateTime::parse_from_str(reset_time.trim(), "%Y-%m-%d %H:%M").ok()
+    }
+
+    /// 按当前配置排序账号卡片：激活账号永远第一；主键为所选方式，另一项作次级键；
+    /// 超时未更新的账号视为最差情况，固定排在最后
+    fn sort_accounts(&self, accounts: &mut [crate::models::ManagedAccount]) {
+        use crate::models::SortMode;
+        let active_id = self.config.active_account_id.clone();
+        let now = chrono::Local::now().naive_local();
+        accounts.sort_by(|a, b| {
+            // 不排序：不区分激活/超时，直接按名称排列
+            if self.config.sort_mode == SortMode::None {
+                return a.auth_data.user.name.cmp(&b.auth_data.user.name);
+            }
+            // 激活账号永远排第一
+            let is_active_a = active_id.as_deref() == Some(a.id.as_str());
+            let is_active_b = active_id.as_deref() == Some(b.id.as_str());
+            if is_active_a != is_active_b {
+                return if is_active_a { std::cmp::Ordering::Less } else { std::cmp::Ordering::Greater };
+            }
+            let reset_a = Self::parse_reset_time_for_sort(&a.reset_time);
+            let reset_b = Self::parse_reset_time_for_sort(&b.reset_time);
+            let stale_a = reset_a.map(|t| t < now).unwrap_or(true);
+            let stale_b = reset_b.map(|t| t < now).unwrap_or(true);
+            // 超时未更新的排最后（其余照常排序）
+            if stale_a != stale_b {
+                return stale_a.cmp(&stale_b);
+            }
+            let remaining_a = 100.0 - a.usage_percent;
+            let remaining_b = 100.0 - b.usage_percent;
+            match self.config.sort_mode {
+                SortMode::ResetTime => {
+                    reset_a
+                        .cmp(&reset_b)
+                        .then(remaining_b.partial_cmp(&remaining_a).unwrap_or(std::cmp::Ordering::Equal))
+                }
+                SortMode::WindowRemaining => {
+                    remaining_b.partial_cmp(&remaining_a).unwrap_or(std::cmp::Ordering::Equal)
+                        .then(reset_a.cmp(&reset_b))
+                }
+                // None 已在上方提前按名称排序返回，不会走到这里
+                SortMode::None => std::cmp::Ordering::Equal,
+            }
+        });
     }
 }

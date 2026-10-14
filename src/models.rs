@@ -39,6 +39,21 @@ pub struct AppConfig {
     /// 切换账号时若目标账号信息已过期，自动打开更新窗口并自动更新
     #[serde(default)]
     pub auto_update_on_switch_expired: bool,
+    /// 卡片列表排序方式
+    #[serde(default)]
+    pub sort_mode: SortMode,
+}
+
+/// 卡片列表排序方式
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum SortMode {
+    /// 不排序（按名称排列）
+    #[default]
+    None,
+    /// 按重置时间（主键），窗口余量（次键）
+    ResetTime,
+    /// 按窗口余量（主键），重置时间（次键）
+    WindowRemaining,
 }
 
 fn default_language() -> String {
@@ -57,6 +72,7 @@ impl Default for AppConfig {
             },
             language: default_language(),
             auto_update_on_switch_expired: false,
+            sort_mode: SortMode::default(),
         }
     }
 }
