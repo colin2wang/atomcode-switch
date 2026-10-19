@@ -115,6 +115,7 @@ impl AtomcodeSwitchApp {
         self.is_auto_updating = false;
         self.auto_update_rx = None;
         self.auto_parse_pending = true;
+        self.clear_update_message();
         self.start_auto_update();
     }
 
@@ -233,12 +234,22 @@ impl AtomcodeSwitchApp {
                     a.auth_data.user.name == login_name
                         || a.auth_data.user.username == login_name
                 }) {
-                    self.config.active_account_id =
-                        Some(self.config.accounts[matched_idx].id.clone());
-                    let new_acc = &mut self.config.accounts[matched_idx];
-                    new_acc.last_updated = Self::current_time_str();
-                    new_acc.is_valid = true;
-                    Self::apply_parsed_fields(new_acc, text);
+                    // 先解析：一个字段都没识别出来时不写入任何数据，避免「假成功」
+                    let parsed = {
+                        let acc = &mut self.config.accounts[matched_idx];
+                        Self::apply_parsed_fields(acc, text)
+                    };
+                    if !parsed {
+                        return Err(self.i18n.t0("status_parse_no_fields"));
+                    }
+
+                    let matched_id = self.config.accounts[matched_idx].id.clone();
+                    self.config.active_account_id = Some(matched_id);
+                    {
+                        let new_acc = &mut self.config.accounts[matched_idx];
+                        new_acc.last_updated = Self::current_time_str();
+                        new_acc.is_valid = true;
+                    }
                     config_io::save_config(&self.config);
                     self.status_message = self.i18n.t1("status_updated_from_paste", login_name);
                     return Ok(());
@@ -246,10 +257,19 @@ impl AtomcodeSwitchApp {
             }
         }
 
-        let acc = &mut self.config.accounts[active_idx];
-        Self::apply_parsed_fields(acc, text);
-        acc.last_updated = Self::current_time_str();
-        acc.is_valid = true;
+        let parsed = {
+            let acc = &mut self.config.accounts[active_idx];
+            Self::apply_parsed_fields(acc, text)
+        };
+        if !parsed {
+            return Err(self.i18n.t0("status_parse_no_fields"));
+        }
+
+        {
+            let acc = &mut self.config.accounts[active_idx];
+            acc.last_updated = Self::current_time_str();
+            acc.is_valid = true;
+        }
 
         config_io::save_config(&self.config);
         self.status_message = self.i18n.t0("status_updated_manual");
@@ -258,7 +278,11 @@ impl AtomcodeSwitchApp {
 
     /// 将解析出的字段应用到 ManagedAccount（纯借用辅助方法）
     /// 同时支持中文和英文格式的 /login 输出
-    pub fn apply_parsed_fields(acc: &mut ManagedAccount, text: &str) {
+    ///
+    /// 返回是否至少成功解析出一个字段；返回 false 时不会修改 `acc` 的任何字段。
+    pub fn apply_parsed_fields(acc: &mut ManagedAccount, text: &str) -> bool {
+        let mut parsed_any = false;
+
         // ---- 套餐名 ----
         // 中文：套餐：CodingPlan Lite · expires ...
         // 英文：Plan: CodingPlan Lite  ·  expires ...
@@ -266,15 +290,19 @@ impl AtomcodeSwitchApp {
             let after = &text[start + "套餐：".len()..];
             if let Some(end) = after.find("·") {
                 acc.plan_name = after[..end].trim().to_string();
+                parsed_any = true;
             } else if let Some(end) = after.find('\n') {
                 acc.plan_name = after[..end].trim().to_string();
+                parsed_any = true;
             }
         } else if let Some(start) = text.find("Plan:") {
             let after = &text[start + "Plan:".len()..];
             if let Some(end) = after.find("·") {
                 acc.plan_name = after[..end].trim().to_string();
+                parsed_any = true;
             } else if let Some(end) = after.find('\n') {
                 acc.plan_name = after[..end].trim().to_string();
+                parsed_any = true;
             }
         }
 
@@ -289,6 +317,7 @@ impl AtomcodeSwitchApp {
                 if let Ok(days) = days_str.parse::<u32>() {
                     acc.remaining_days = days;
                     days_found = true;
+                    parsed_any = true;
                 }
             }
         }
@@ -307,6 +336,7 @@ impl AtomcodeSwitchApp {
                 if !digits.is_empty() {
                     if let Ok(days) = digits.parse::<u32>() {
                         acc.remaining_days = days;
+                        parsed_any = true;
                     }
                 }
             }
@@ -325,6 +355,7 @@ impl AtomcodeSwitchApp {
             if !num_str.is_empty() {
                 if let Ok(pct) = num_str.parse::<f32>() {
                     acc.usage_percent = pct;
+                    parsed_any = true;
                 }
             }
         }
@@ -347,6 +378,7 @@ impl AtomcodeSwitchApp {
                     };
                     // 组合日期和时间，若重置时间已过则视为明天
                     acc.reset_time = Self::combine_reset_datetime(&today, &hm, now);
+                    parsed_any = true;
                 }
                 reset_found = true;
                 break;
@@ -364,10 +396,13 @@ impl AtomcodeSwitchApp {
                             raw
                         };
                         acc.reset_time = Self::combine_reset_datetime(&today, &hm, now);
+                        parsed_any = true;
                     }
                     break;
                 }
             }
         }
+
+        parsed_any
     }
 }

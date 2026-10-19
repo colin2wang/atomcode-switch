@@ -15,6 +15,7 @@ Rust 2024 单 crate，eframe/egui 0.27 桌面 GUI，用于切换管理多个 Ato
 - **配置兼容**：`AppConfig`（持久化于 `atomcode-accounts.yaml`）新增字段必须加 `#[serde(default)]`，旧配置文件必须能继续加载
 - **时间格式**：`reset_time` 为 `YYYY-MM-DD HH:MM`（本地时区），需兼容旧 `HH:MM` 格式；到期判断集中在 `is_account_expired()`，卡片展示（`format_reset_countdown`）与其保持一致
 - `/login` 输出解析在 `src/ops/account_ops.rs`，需同时兼容中英文输出（`剩余`/`remaining`、`套餐`/`Plan` 等）
+- **更新窗口消息/关闭语义**：解析结果（成功或失败）统一通过 `App::update_message`（`UpdateMessage { kind: UpdateMessageKind::{Info, Success, Error}, text }`，用 `set_update_message`/`clear_update_message`）显示在「更新账号信息」窗口内的消息区，Error 为红色并附重试提示、Success 为绿色、Info（如「正在获取…」）为蓝色无标题；**只有解析成功才关闭窗口**，失败时窗口与文本框原始内容必须保留。`apply_parsed_fields` 返回「是否至少识别出一个字段」；一个字段都没识别出来时 `parse_login_output_and_update` 必须返回 `Err` 且不落盘、不改 `last_updated`
 
 ## 发布流程
 

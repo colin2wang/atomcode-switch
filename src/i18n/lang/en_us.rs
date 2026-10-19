@@ -63,6 +63,9 @@ pub fn get(key: &str) -> &str {
         "update_cancel" => "Cancel",
         "update_parse" => "Parse & Update",
         "update_hint" => "Paste /login output here, or click \"Re-fetch\" above...",
+        "update_error_title" => "Parse failed — window and original content are kept",
+        "update_error_hint" => "Click \"Re-fetch\" to retry, or edit the content above and click \"Parse & Update\" again",
+        "update_success_title" => "Parsed successfully",
 
         // ======== Delete Confirmation ========
         "delete_confirm_title" => "Confirm Delete",
@@ -98,6 +101,7 @@ pub fn get(key: &str) -> &str {
         "status_no_active_import" => "No active account, please import one first",
         "status_updated" => "Account info updated",
         "status_update_failed" => "Update failed: {0}",
+        "status_parse_no_fields" => "No account info recognized (plan / usage / remaining days / reset time); make sure this is the complete output of atomcode /login",
         "status_auth_cleared" => "Auth cleared",
         "status_clear_failed" => "Clear failed: {0}",
         "status_auto_fetch_cancelled" => "Auto-fetch cancelled",

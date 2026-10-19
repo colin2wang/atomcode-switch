@@ -14,7 +14,9 @@ impl AtomcodeSwitchApp {
         let (tx, rx) = std::sync::mpsc::channel();
         self.auto_update_rx = Some(rx);
         self.is_auto_updating = true;
-        self.status_message = self.i18n.t0("status_fetching");
+        let msg = self.i18n.t0("status_fetching");
+        self.status_message = msg.clone();
+        self.set_update_message(crate::app::UpdateMessageKind::Info, msg);
 
         std::thread::spawn(move || {
             let mut cmd = std::process::Command::new("atomcode");
@@ -85,23 +87,31 @@ impl AtomcodeSwitchApp {
                         self.auto_parse_pending = false;
                         let text = self.manual_update_text.clone();
                         if text.trim().is_empty() {
-                            self.status_message = self.i18n.t0("status_paste_empty");
+                            let msg = self.i18n.t0("status_paste_empty");
+                            self.set_update_message(crate::app::UpdateMessageKind::Error, msg);
                         } else if self.config.active_account_id.is_none() {
-                            self.status_message = self.i18n.t0("status_no_active_import");
+                            let msg = self.i18n.t0("status_no_active_import");
+                            self.set_update_message(crate::app::UpdateMessageKind::Error, msg);
                         } else {
                             match self.parse_login_output_and_update(&text) {
                                 Ok(()) => {
                                     self.import_current_auth();
                                     self.manual_update_text.clear();
+                                    // 解析成功：记录结果消息后关闭窗口
+                                    let msg = self.status_message.clone();
+                                    self.set_update_message(crate::app::UpdateMessageKind::Success, msg);
                                     self.show_manual_update = false;
                                 }
                                 Err(e) => {
-                                    self.status_message = self.i18n.t1("status_update_failed", &e);
+                                    // 解析失败：保留窗口与原始内容，在窗口内显示失败原因
+                                    self.set_update_message(crate::app::UpdateMessageKind::Error, e);
                                 }
                             }
                         }
                     } else {
-                        self.status_message = self.i18n.t0("status_fetched");
+                        let msg = self.i18n.t0("status_fetched");
+                        self.status_message = msg.clone();
+                        self.set_update_message(crate::app::UpdateMessageKind::Info, msg);
                     }
                 }
                 Err(std::sync::mpsc::TryRecvError::Empty) => {
@@ -109,7 +119,8 @@ impl AtomcodeSwitchApp {
                 }
                 Err(std::sync::mpsc::TryRecvError::Disconnected) => {
                     self.is_auto_updating = false;
-                    self.status_message = self.i18n.t0("status_fetch_failed");
+                    let msg = self.i18n.t0("status_fetch_failed");
+                    self.set_update_message(crate::app::UpdateMessageKind::Error, msg);
                 }
             }
         }

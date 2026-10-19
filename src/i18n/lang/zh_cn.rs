@@ -63,6 +63,9 @@ pub fn get(key: &str) -> &str {
         "update_cancel" => "取消",
         "update_parse" => "解析并更新",
         "update_hint" => "在此粘贴 /login 的输出，或点击上方「重新获取」再次获取...",
+        "update_error_title" => "解析失败，已保留原窗口与原始内容",
+        "update_error_hint" => "可点击「重新获取」重试，或修改上方内容后再次点击「解析并更新」",
+        "update_success_title" => "解析成功",
 
         // ======== 删除确认对话框 ========
         "delete_confirm_title" => "确认删除",
@@ -98,6 +101,7 @@ pub fn get(key: &str) -> &str {
         "status_no_active_import" => "没有激活的账号，请先导入账号",
         "status_updated" => "账号信息已更新",
         "status_update_failed" => "更新失败: {0}",
+        "status_parse_no_fields" => "未能识别出任何账号信息（套餐 / 用量 / 剩余天数 / 重置时间），请确认内容是 atomcode /login 的完整输出",
         "status_auth_cleared" => "已清空当前登录",
         "status_clear_failed" => "清空失败: {0}",
         "status_auto_fetch_cancelled" => "已取消自动获取",

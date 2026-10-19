@@ -298,20 +298,36 @@ impl AtomcodeSwitchApp {
                             {
                                 let text = self.manual_update_text.clone();
                                 if text.trim().is_empty() {
-                                    self.status_message = self.i18n.t0("status_paste_empty");
+                                    let msg = self.i18n.t0("status_paste_empty");
+                                    self.set_update_message(
+                                        crate::app::UpdateMessageKind::Error,
+                                        msg,
+                                    );
                                 } else if self.config.active_account_id.is_none() {
-                                    self.status_message = self.i18n.t0("status_no_active_import");
+                                    let msg = self.i18n.t0("status_no_active_import");
+                                    self.set_update_message(
+                                        crate::app::UpdateMessageKind::Error,
+                                        msg,
+                                    );
                                 } else {
                                     match self.parse_login_output_and_update(&text) {
                                         Ok(()) => {
-                                            // 解析成功后自动同步磁盘上的登录信息
+                                            // 仅解析成功才关闭窗口：记录结果消息后再关
                                             self.import_current_auth();
                                             self.manual_update_text.clear();
+                                            let msg = self.status_message.clone();
+                                            self.set_update_message(
+                                                crate::app::UpdateMessageKind::Success,
+                                                msg,
+                                            );
                                             self.show_manual_update = false;
                                         }
                                         Err(e) => {
-                                            // 解析失败：保留窗口，可重新获取后再试
-                                            self.status_message = self.i18n.t1("status_update_failed", &e);
+                                            // 解析失败：窗口保留、原始内容保留，消息区显示失败原文
+                                            self.set_update_message(
+                                                crate::app::UpdateMessageKind::Error,
+                                                e,
+                                            );
                                         }
                                     }
                                 }
@@ -322,6 +338,7 @@ impl AtomcodeSwitchApp {
                                 |ui| {
                                     if ui.button(self.i18n.t0("btn_cancel")).clicked() {
                                         self.show_manual_update = false;
+                                        self.clear_update_message();
                                     }
                                 },
                             );
@@ -375,6 +392,7 @@ impl AtomcodeSwitchApp {
                                 {
                                     self.manual_update_text.clear();
                                     // 重新获取成功后自动解析更新
+                                    self.clear_update_message();
                                     self.auto_parse_pending = true;
                                     self.start_auto_update();
                                 }
@@ -383,6 +401,53 @@ impl AtomcodeSwitchApp {
                     });
 
                     ui.add_space(8.0);
+
+                    // 消息区：解析/获取的结果（成功或失败）都显示在窗口内
+                    if let Some(msg) = self.update_message.clone() {
+                        use crate::app::UpdateMessageKind::{Error, Info, Success};
+                        let (title, accent, bg) = match msg.kind {
+                            Info => (
+                                String::new(),
+                                GITHUB_BLUE,
+                                egui::Color32::from_rgb(233, 244, 255),
+                            ),
+                            Success => (
+                                self.i18n.t0("update_success_title"),
+                                GITHUB_GREEN,
+                                egui::Color32::from_rgb(233, 250, 233),
+                            ),
+                            Error => (
+                                self.i18n.t0("update_error_title"),
+                                GITHUB_RED,
+                                egui::Color32::from_rgb(255, 238, 238),
+                            ),
+                        };
+
+                        egui::Frame::none()
+                            .fill(bg)
+                            .stroke(egui::Stroke::new(1.0, accent))
+                            .rounding(4.0)
+                            .inner_margin(egui::Margin::same(8.0))
+                            .show(ui, |ui| {
+                                if !title.is_empty() {
+                                    ui.label(
+                                        egui::RichText::new(title).size(12.0).strong().color(accent),
+                                    );
+                                }
+                                ui.label(
+                                    egui::RichText::new(&msg.text).size(12.0).color(accent),
+                                );
+                                if msg.kind == Error {
+                                    ui.label(
+                                        egui::RichText::new(self.i18n.t0("update_error_hint"))
+                                            .size(11.0)
+                                            .color(GITHUB_TEXT_SECONDARY),
+                                    );
+                                }
+                            });
+
+                        ui.add_space(8.0);
+                    }
 
                     // 文本框占据剩余全部空间，按钮行贴底
                     egui::ScrollArea::vertical()
@@ -401,6 +466,7 @@ impl AtomcodeSwitchApp {
                 // 点击系统标题栏 X 时关闭子窗口
                 if ctx.input(|i| i.viewport().close_requested()) {
                     self.show_manual_update = false;
+                    self.clear_update_message();
                 }
             },
         );
@@ -599,6 +665,7 @@ impl AtomcodeSwitchApp {
                                     self.is_auto_updating = false;
                                     self.auto_update_rx = None;
                                     self.auto_parse_pending = true;
+                                    self.clear_update_message();
                                     self.start_auto_update();
                                 }
                             });

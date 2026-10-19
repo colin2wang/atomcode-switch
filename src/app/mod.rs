@@ -16,6 +16,24 @@ pub struct SettingsState {
     pub auto_update_on_switch_expired: bool,
 }
 
+/// 「更新账号信息」窗口内消息区消息的类型
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UpdateMessageKind {
+    /// 进行中/普通提示（如「正在获取登录信息...」），无标题
+    Info,
+    /// 解析成功（绿色）
+    Success,
+    /// 解析/获取失败（红色，附重试提示）
+    Error,
+}
+
+/// 「更新账号信息」窗口内消息区展示的一条消息
+#[derive(Debug, Clone)]
+pub struct UpdateMessage {
+    pub kind: UpdateMessageKind,
+    pub text: String,
+}
+
 /// 主应用结构体
 pub struct AtomcodeSwitchApp {
     pub config: AppConfig,
@@ -31,6 +49,8 @@ pub struct AtomcodeSwitchApp {
     pub auto_update_rx: Option<std::sync::mpsc::Receiver<String>>,
     /// 自动获取完成后是否自动解析并更新（切换过期账号时触发）
     pub auto_parse_pending: bool,
+    /// 「更新账号信息」窗口消息区展示的解析/获取结果（不论成败）
+    pub update_message: Option<UpdateMessage>,
 }
 
 impl AtomcodeSwitchApp {
@@ -55,10 +75,26 @@ impl AtomcodeSwitchApp {
             is_auto_updating: false,
             auto_update_rx: None,
             auto_parse_pending: false,
+            update_message: None,
         };
 
         app.status_message = app.i18n.t0("status_ready");
         app.sync_active_account_status();
         app
+    }
+
+    /// 记录「更新账号信息」的结果消息：显示在窗口内消息区，失败同时写入主窗口状态栏
+    ///
+    /// 无论成功与否都记录；是否关闭窗口由调用方根据成功与否决定。
+    pub fn set_update_message(&mut self, kind: UpdateMessageKind, text: String) {
+        if kind == UpdateMessageKind::Error {
+            self.status_message = self.i18n.t1("status_update_failed", &text);
+        }
+        self.update_message = Some(UpdateMessage { kind, text });
+    }
+
+    /// 清除「更新账号信息」窗口内的结果消息
+    pub fn clear_update_message(&mut self) {
+        self.update_message = None;
     }
 }
