@@ -1,3 +1,6 @@
+# Windows release packaging script.
+# On macOS/Linux use `cargo build --release` directly; the binary is
+# target/release/atomcode-switch (no .exe suffix) and no packaging is required.
 $ErrorActionPreference = "Stop"
 
 $ProjectName = "atomcode-switch"

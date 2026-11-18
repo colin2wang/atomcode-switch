@@ -81,9 +81,12 @@ pub fn get(key: &str) -> &str {
         "dialog_switch_dir_msg" => "目标目录已有 {0} 个账号：\n{1}\n\n当前程序有 {2} 个账号：\n{3}\n\n是否用目标目录的账号替换当前账号？",
         "dialog_overwrite_msg" => "目标文件已有 {0} 个账号：\n{1}\n\n即将导出 {2} 个账号：\n{3}\n\n是否覆盖？",
         "dialog_none" => "（无）",
+        "dialog_account_line" => "  - {0}（{1}）",
 
         // ======== 状态消息 ========
         "status_ready" => "就绪",
+        "status_save_failed" => "保存配置失败: {0}",
+        "status_config_load_failed" => "配置加载失败: {0}，已备份原文件并加载默认配置",
         "status_auto_switched" => "自动切换至账号: {0}",
         "status_switched" => "已切换至: {0}",
         "status_switch_failed" => "切换失败: {0}",
@@ -110,6 +113,11 @@ pub fn get(key: &str) -> &str {
         "status_exported" => "导出成功",
         "status_kept_original" => "已保留原文件",
         "status_settings_saved" => "设置已保存",
+        "account_plan_unknown" => "未知套餐",
+        "status_imported_hint" => "导入成功: {0}（信息未知，请点击更新信息执行 /login）",
+        "fetch_no_output" => "（未获取到输出，请重试或手动粘贴 /login 输出）",
+        "fetch_spawn_failed" => "（无法执行 atomcode login: {0}）",
+        "fetch_timeout" => "（获取登录信息超时，请重试或手动粘贴 /login 输出）",
 
         // 找不到 key 时原样返回
         _ => key,

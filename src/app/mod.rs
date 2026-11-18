@@ -14,6 +14,8 @@ pub struct SettingsState {
     pub max_usage_percent: f32,
     /// 切换时过期账号自动更新
     pub auto_update_on_switch_expired: bool,
+    /// 浏览目录时确认要从中导入账号的目录；在「确定」时才真正导入
+    pub pending_import_data_dir: Option<String>,
 }
 
 /// 「更新账号信息」窗口内消息区消息的类型
@@ -46,11 +48,16 @@ pub struct AtomcodeSwitchApp {
     pub show_manual_update: bool,
     pub manual_update_text: String,
     pub is_auto_updating: bool,
-    pub auto_update_rx: Option<std::sync::mpsc::Receiver<String>>,
+    /// 获取结果通道：(generation, 输出或错误)。过期 generation 的结果会被丢弃。
+    pub auto_update_rx: Option<std::sync::mpsc::Receiver<(u64, Result<String, String>)>>,
+    /// 当前获取代号；关窗/取消时自增，用于作废后台线程的结果
+    pub fetch_generation: u64,
     /// 自动获取完成后是否自动解析并更新（切换过期账号时触发）
     pub auto_parse_pending: bool,
     /// 「更新账号信息」窗口消息区展示的解析/获取结果（不论成败）
     pub update_message: Option<UpdateMessage>,
+    /// 解析成功后延迟关闭窗口的时刻，让绿色成功消息有机会渲染
+    pub close_update_after: Option<std::time::Instant>,
 }
 
 impl AtomcodeSwitchApp {
@@ -58,7 +65,7 @@ impl AtomcodeSwitchApp {
         crate::app::theme::setup_github_theme(&cc.egui_ctx);
         crate::app::theme::setup_fonts(&cc.egui_ctx);
 
-        let config = config_io::load_config();
+        let (config, config_load_error) = config_io::load_config();
         let lang = Language::from_str(&config.language);
         let i18n = I18n::load(lang);
 
@@ -74,11 +81,16 @@ impl AtomcodeSwitchApp {
             manual_update_text: String::new(),
             is_auto_updating: false,
             auto_update_rx: None,
+            fetch_generation: 0,
             auto_parse_pending: false,
             update_message: None,
+            close_update_after: None,
         };
 
-        app.status_message = app.i18n.t0("status_ready");
+        app.status_message = match config_load_error {
+            Some(e) => app.i18n.t1("status_config_load_failed", &e),
+            None => app.i18n.t0("status_ready"),
+        };
         app.sync_active_account_status();
         app
     }
@@ -96,5 +108,67 @@ impl AtomcodeSwitchApp {
     /// 清除「更新账号信息」窗口内的结果消息
     pub fn clear_update_message(&mut self) {
         self.update_message = None;
+    }
+
+    /// 统一关闭更新窗口并清理全部获取状态：自增 generation 使后台结果作废，
+    /// 防止关闭后仍解析落盘。
+    pub fn close_update_window(&mut self) {
+        self.fetch_generation = self.fetch_generation.wrapping_add(1);
+        self.show_manual_update = false;
+        self.auto_update_rx = None;
+        self.is_auto_updating = false;
+        self.auto_parse_pending = false;
+        self.close_update_after = None;
+        self.clear_update_message();
+    }
+
+    /// 请求延迟关闭更新窗口（成功消息渲染一小段时间后再关）。
+    /// 同时自增 generation，避免后台旧结果再次触发解析。
+    pub fn schedule_update_window_close(&mut self, delay: std::time::Duration) {
+        self.fetch_generation = self.fetch_generation.wrapping_add(1);
+        self.auto_update_rx = None;
+        self.is_auto_updating = false;
+        self.auto_parse_pending = false;
+        self.close_update_after = Some(std::time::Instant::now() + delay);
+    }
+
+    /// 仅取消正在进行的获取（保留窗口与文本框内容），使后台结果作废。
+    pub fn cancel_auto_fetch(&mut self) {
+        self.fetch_generation = self.fetch_generation.wrapping_add(1);
+        self.auto_update_rx = None;
+        self.is_auto_updating = false;
+        self.auto_parse_pending = false;
+        self.close_update_after = None;
+    }
+
+    /// 为一次新的获取重置窗口状态（不关闭窗口），使上一个后台结果作废。
+    pub fn reset_for_new_fetch(&mut self) {
+        self.fetch_generation = self.fetch_generation.wrapping_add(1);
+        self.auto_update_rx = None;
+        self.is_auto_updating = false;
+        self.close_update_after = None;
+    }
+
+    /// 处理延迟关闭：到点后真正关闭窗口。
+    pub fn poll_update_window_close(&mut self) {
+        let due = self
+            .close_update_after
+            .map(|t| std::time::Instant::now() >= t)
+            .unwrap_or(false);
+        if due {
+            self.close_update_window();
+        }
+    }
+
+    /// 保存配置；失败时在状态栏显示本地化错误并返回 false。
+    /// 调用方仅在返回 true 时写入「成功」状态消息，避免错误信息被覆盖。
+    pub fn persist_config(&mut self) -> bool {
+        match config_io::save_config(&self.config) {
+            Ok(()) => true,
+            Err(e) => {
+                self.status_message = self.i18n.t1("status_save_failed", &e);
+                false
+            }
+        }
     }
 }

@@ -81,9 +81,12 @@ pub fn get(key: &str) -> &str {
         "dialog_switch_dir_msg" => "Target directory has {0} accounts:\n{1}\n\nCurrent app has {2} accounts:\n{3}\n\nReplace current accounts with target directory ones?",
         "dialog_overwrite_msg" => "Target file has {0} accounts:\n{1}\n\nExporting {2} accounts:\n{3}\n\nOverwrite?",
         "dialog_none" => "(none)",
+        "dialog_account_line" => "  - {0} ({1})",
 
         // ======== Status Messages ========
         "status_ready" => "Ready",
+        "status_save_failed" => "Failed to save config: {0}",
+        "status_config_load_failed" => "Config load failed: {0}; original file backed up, defaults loaded",
         "status_auto_switched" => "Auto-switched to: {0}",
         "status_switched" => "Switched to: {0}",
         "status_switch_failed" => "Switch failed: {0}",
@@ -110,6 +113,11 @@ pub fn get(key: &str) -> &str {
         "status_exported" => "Export succeeded",
         "status_kept_original" => "Kept original file",
         "status_settings_saved" => "Settings saved",
+        "account_plan_unknown" => "Unknown plan",
+        "status_imported_hint" => "Imported: {0} (info unknown, click Update Info to run /login)",
+        "fetch_no_output" => "(No output received; retry or paste the /login output manually)",
+        "fetch_spawn_failed" => "(Unable to run atomcode login: {0})",
+        "fetch_timeout" => "(Timed out fetching login info; retry or paste the /login output manually)",
 
         // fallback
         _ => key,

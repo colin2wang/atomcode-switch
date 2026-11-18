@@ -1,13 +1,16 @@
+use super::atomic_write_text;
 use crate::models::AuthToml;
 use std::fs;
 use std::path::PathBuf;
 
-/// 获取用户主目录
+/// 获取用户主目录：Windows 下优先 USERPROFILE，避免 Git Bash 的 POSIX 风格 HOME
+/// 被 `PathBuf::from` 解析成当前盘根下的错误路径（读不到 CLI 实际写入的 auth.toml）。
 fn home_dir() -> Option<PathBuf> {
-    std::env::var("HOME")
-        .or_else(|_| std::env::var("USERPROFILE"))
-        .map(PathBuf::from)
-        .ok()
+    #[cfg(windows)]
+    let value = std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME"));
+    #[cfg(not(windows))]
+    let value = std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE"));
+    value.map(PathBuf::from).ok()
 }
 
 /// 获取 Atomcode 目录路径
@@ -37,18 +40,11 @@ pub fn read_current_auth(custom_dir: &Option<String>) -> Option<AuthToml> {
     None
 }
 
-/// 写入 auth.toml
+/// 写入 auth.toml（原子替换，失败时原文件保持不变）
 pub fn write_auth(custom_dir: &Option<String>, auth: &AuthToml) -> Result<(), String> {
     let path = get_auth_file_path(custom_dir);
-    if let Some(parent) = path.parent() {
-        if !parent.exists() {
-            let _ = fs::create_dir_all(parent);
-        }
-    }
-    match toml::to_string(auth) {
-        Ok(content) => fs::write(&path, content).map_err(|e| e.to_string()),
-        Err(e) => Err(e.to_string()),
-    }
+    let content = toml::to_string(auth).map_err(|e| e.to_string())?;
+    atomic_write_text(&path, &content)
 }
 
 /// 清空 auth.toml（删除文件）

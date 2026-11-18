@@ -1,5 +1,10 @@
 # Change History
 
+## 2026-11-01
+
+- Update release doc. — release v0.1.8 release-notes updates (`releases/v0.1.8.md`)
+- Update CHANGE_HISTORY.md — housekeeping of the change history file
+
 ## v0.1.8 (2026-11-01)
 
 ### Added
@@ -12,6 +17,13 @@
 - **No-field-recognized guard** — When `parse_login_output_and_update` recognizes none of the fields (plan / usage / remaining days / reset time), it returns `Err` without writing to disk or updating `last_updated`; the user sees a localized "No account info recognized…" message.
 - **Auto-fetched status shown inline** — After a successful auto-fetch, an Info (blue) message is shown in the update window ("Fetching…" / "Fetched") rather than only updating the main status bar.
 - **`build.ps1` hardened** — Added safety checks to the release packaging script.
+- **Data-safety hardening** — Config and `auth.toml` writes are now atomic (`.tmp` → `.bak` → `fs::rename`); a malformed accounts YAML is backed up to `*.bak` and reported in the status bar instead of being silently reset. All persistent structs use struct-level `#[serde(default)]` so older configs keep loading. `save_config()` now returns `Result` and failures surface to the UI.
+- **Unified time parsing** — New `time_utils::parse_reset_datetime()` is the single source of truth for expiry, card countdown, and sorting; legacy `HH:MM` values are no longer misjudged as stale. All timezone conversions use DST-safe `local` handling, eliminating `unwrap()` panic paths.
+- **Transactional `/login` parsing** — New pure `login_parser` collects `ParsedFields` before applying anything (zero recognized fields = no write). Added English `Usage: N%` support and strict HH:MM validation; fixed a UTF-8 byte-slice panic risk.
+- **Robust update state machine** — Fetch results are generation-guarded so closing/cancelling the window discards stale background results; `atomcode login` output is captured on separate stdout/stderr threads with a real timeout and early-exit; execution errors go to the error message area instead of the parser. Repeated clicks no longer spawn duplicate processes.
+- **Account-info freshness** — Newly imported accounts are marked `Unknown` and excluded from auto-switch until their info is refreshed via `/login`. Auto-switch now requires the candidate to be below the threshold and at least 5% better than the current account (hysteresis), and programmatic switches no longer pop the update window.
+- **UI/i18n/theme cleanup** — All user-visible strings are localized (added key-alignment test and canonical `ALL_KEYS`); export default filename is `atomcode-accounts.yaml`; card rendering uses deferred actions instead of cloning accounts each frame; colors and button styles are centralized in `theme.rs`; ICO decode failures degrade gracefully.
+- **Unit tests + CI** — Added `#[cfg(test)]` coverage for parsing, time, config compatibility and i18n alignment; added a GitHub Actions workflow running `fmt --check`, `clippy -D warnings`, `check` and `test`.
 
 ## v0.1.7 (2026-09-25)
 

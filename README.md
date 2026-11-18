@@ -1,10 +1,12 @@
 # AtomCode Switch
 
+![Rust](https://img.shields.io/badge/Rust-1.85+-DEA584?logo=rust&logoColor=black) ![Egui](https://img.shields.io/badge/Egui-0.27-E08C14) ![Eframe](https://img.shields.io/badge/Eframe-0.27-E08C14)
+
 A desktop GUI tool for managing multiple AtomCode accounts and switching between them with ease.
 
 ## Links
 
-[Change History](CHANGE_HISTORY.md) | 
+[Change History](CHANGE_HISTORY.md)
 
 ## Features
 
@@ -12,7 +14,7 @@ A desktop GUI tool for managing multiple AtomCode accounts and switching between
 - **Multi-Account Management** – Import, view, and manage multiple AtomCode accounts in one place.
 - **One-Click Switching** – Switch between accounts instantly. The tool writes the selected account's `auth.toml` file to the AtomCode directory.
 - **Usage Monitoring** – See each account's usage percentage, plan name, remaining days, and reset time (with accurate cross-day countdown) at a glance. Expired reset times are highlighted in yellow with a "please update" prompt.
-- **Auto & Manual Info Update** – Click "Update Login Info" on the active account card to open the update dialog. Either paste `/login` output manually, or click "自动获取" to run `atomcode login` in a hidden window and auto-fill the output — both use the same "解析并更新" button to extract plan, usage, remaining days, and reset time.
+- **Auto & Manual Info Update** – Click "Update Info" on the active account card to open the update dialog. Either paste `/login` output manually, or click "Re-fetch" to run `atomcode login` in a hidden window and auto-fill the output — both use the same "解析并更新" button to extract plan, usage, remaining days, and reset time.
 - **Auto-Switch Rules** – Set a usage threshold. When the active account exceeds it, the tool automatically switches to the lowest-usage valid account.
 - **Custom AtomCode Directory** – Supports custom `auth.toml` storage locations (useful for WSL or non-default setups).
 - **Imported-Account Persistence** – Account data (including `auth.toml` content, usage stats, and plan info) is stored locally in a config file.
@@ -24,9 +26,11 @@ A desktop GUI tool for managing multiple AtomCode accounts and switching between
 |------|------|---------|
 | Local Config | `<exe_dir>/config.yaml` | Stores custom data directory path (only created when non-default values are set) |
 | Account Data | `<data_dir>/atomcode-accounts.yaml` | Stores managed accounts, active account ID, auto-switch rules, custom auth.toml directory path |
-| Auth Data | `~/.atomcode/auth.toml` | AtomCode authentication token file (this is what the tool reads/writes to switch accounts) |
+| Auth Data | `~/.atomcode/auth.toml` (Windows: `%USERPROFILE%\.atomcode`) | AtomCode authentication token file (this is what the tool reads/writes to switch accounts) |
 
 > Default `<data_dir>` is `~/.atomcode-switch`. You can customize it via the settings panel.
+>
+> **Security note:** the account data file stores auth tokens in plain text. Keep it in a trusted location and protect it with appropriate file permissions. Exported YAML files also contain tokens.
 
 ## Installation
 
@@ -51,6 +55,14 @@ The binary will be at `target/release/atomcode-switch.exe` (Windows) or `target/
 cargo run --release
 ```
 
+### Verify
+
+```bash
+cargo test
+cargo fmt --all -- --check
+cargo clippy --all-targets
+```
+
 ## Usage Guide
 
 ### Importing an Account
@@ -61,12 +73,12 @@ cargo run --release
 
 ### Updating Account Info
 
-Two methods, both accessed by clicking **Update Login Info** on the active account card:
+Two methods, both accessed by clicking **Update Info** on the active account card:
 
-**Auto-fetch** (recommended):
-1. In the update dialog, click **Auto-Fetch**.
+**Re-fetch** (recommended):
+1. In the update dialog, click **Re-fetch**.
 2. The tool runs `atomcode login` in a hidden window, captures the output (plan, usage, expiry), and fills it into the text editor.
-3. Click **Parse & Update** to parse and save.
+3. Click **Parse & Update** to parse and save. If parsing fails, the dialog stays open with the original text so you can edit and retry.
 
 **Manual paste**:
 1. In your terminal, run the AtomCode command `/login` and copy all of its output.
@@ -86,7 +98,7 @@ Click **Delete** on an account card. If the deleted account was the active one, 
 Enable auto-switch in **Settings**:
 - Toggle **Auto-Switch** on.
 - Set a **Usage Threshold (%)** (default: 95%).
-- When the active account's usage exceeds the threshold, the tool automatically switches to the account with the lowest usage.
+- When the active account's usage exceeds the threshold, the tool automatically switches to the account with the lowest usage (only if it is at least 5% lower and also below the threshold, to avoid flapping). Newly imported accounts with unknown info are excluded until their info is updated via `/login`.
 
 Auto-switch is checked every 30 seconds.
 
@@ -102,18 +114,21 @@ If your AtomCode `auth.toml` is stored in a non-default location (e.g., inside a
 | [`main.rs`](src/main.rs) | Thin binary entry point. Loads the window icon, configures viewport, and launches eframe. |
 | **`app/`** | Application core — struct definition, UI rendering, and theme. |
 | [`app/mod.rs`](src/app/mod.rs) | `AtomcodeSwitchApp` struct and constructor. Holds config, i18n, settings state, and dialog fields. |
-| [`app/ui.rs`](src/app/ui.rs) | All UI rendering. `eframe::App::update()`, toolbar, cards, settings window, dialogs, and `format_reset_countdown` (returns `(String, Color32)` — yellow for expired, gray for active). |
+| [`app/ui.rs`](src/app/ui.rs) | All UI rendering. `eframe::App::update()`, toolbar, cards (deferred `CardAction` — no per-frame account clone), settings window, dialogs, and `format_reset_countdown` (returns `(String, Color32)` — yellow for expired, gray for active). |
 | [`app/theme.rs`](src/app/theme.rs) | GitHub-style light theme, color constants, Chinese font auto-discovery, and style setup. |
 | **`ops/`** | Business operations — account CRUD, auto-switch, login parsing, and auto-fetch. |
-| [`ops/account_ops.rs`](src/ops/account_ops.rs) | Account CRUD + `/login` parser. Sync, switch, import, delete, auto-switch, and `apply_parsed_fields`. |
-| [`ops/fetch_info.rs`](src/ops/fetch_info.rs) | Auto-fetch flow. Spawns hidden `atomcode login`, captures output via background threads. |
+| [`ops/account_ops.rs`](src/ops/account_ops.rs) | Account CRUD, switch/import/delete, auto-switch (with hysteresis), and transactional `apply_parsed_fields`. |
+| [`ops/login_parser.rs`](src/ops/login_parser.rs) | Pure `/login` text parser (Chinese + English), collects `ParsedFields` before any state change. |
+| [`ops/time_utils.rs`](src/ops/time_utils.rs) | Pure reset-time parsing shared by expiry / countdown / sorting (new + legacy `HH:MM`). |
+| [`ops/fetch_info.rs`](src/ops/fetch_info.rs) | Re-fetch flow. Generation-guarded hidden `atomcode login`, dual-thread stdout/stderr capture, timeout and error path. |
 | **`io/`** | File I/O — config persistence and auth.toml read/write. |
-| [`io/config_io.rs`](src/io/config_io.rs) | Config file management. Loads/saves `atomcode-accounts.yaml` + local `config.yaml`, includes old-layout migration. |
-| [`io/atomcode_io.rs`](src/io/atomcode_io.rs) | Low-level auth.toml I/O. `read_current_auth` / `write_auth` / `clear_auth` with custom directory support. |
+| [`io/mod.rs`](src/io/mod.rs) | Shared atomic write (`atomic_write_text`, `.tmp` → `.bak` → rename) and backup helpers. |
+| [`io/config_io.rs`](src/io/config_io.rs) | Config management. Loads/saves `atomcode-accounts.yaml` + local `config.yaml`; backups on parse failure; old-layout migration; Windows path fix. |
+| [`io/atomcode_io.rs`](src/io/atomcode_io.rs) | Low-level auth.toml I/O (atomic write). `read_current_auth` / `write_auth` / `clear_auth` with custom directory support. |
 | **`i18n/`** | Internationalization — string lookup and language definitions. |
 | [`i18n/mod.rs`](src/i18n/mod.rs) | `I18n` struct with `t0`–`t4` parameterized string helpers. |
-| [`i18n/lang/`](src/i18n/lang/) | Language definitions. Each language = one `.rs` file with `pub fn get(key) -> &str`. Includes `card_reset_expired` for the expired countdown state. |
-| [`models.rs`](src/models.rs) | Data structures: `AuthToml`, `User`, `AppConfig`, `ManagedAccount`, `AutoSwitchRules`. |
+| [`i18n/lang/`](src/i18n/lang/) | Language definitions (`pub fn get(key)`) + canonical `ALL_KEYS` registry with an alignment test. |
+| [`models.rs`](src/models.rs) | Data structures: `AuthToml`, `User`, `AppConfig`, `ManagedAccount`, `AutoSwitchRules`, `AccountInfoStatus`. All persistent structs use `#[serde(default)]`. |
 | [`build.rs`](build.rs) | Build script that embeds `atomcode.ico` into the Windows `.exe`. |
 
 ## Tech Stack

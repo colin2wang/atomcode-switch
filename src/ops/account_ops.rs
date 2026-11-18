@@ -1,9 +1,10 @@
 //! 账号操作：同步、切换、导入、删除、自动切换、/login 解析
 
 use crate::models::ManagedAccount;
-use crate::io::{atomcode_io, config_io};
+use crate::io::atomcode_io;
 use crate::app::AtomcodeSwitchApp;
-use chrono::Timelike;
+use crate::ops::login_parser::parse_login_fields;
+use crate::ops::time_utils::parse_reset_datetime;
 
 impl AtomcodeSwitchApp {
     /// 同步当前激活账号的状态（从 auth.toml 读取）
@@ -32,13 +33,22 @@ impl AtomcodeSwitchApp {
 
         if let Some(active_id) = &self.config.active_account_id {
             if let Some(active_acc) = self.config.accounts.iter().find(|a| &a.id == active_id) {
-                if active_acc.usage_percent >= threshold {
+                let active_usage = active_acc.usage_percent;
+                if active_usage >= threshold {
+                    // 目标必须低于阈值，且与当前账号有足够差距（滞回），
+                    // 避免所有账号都超阈值时在两者之间来回抖动。
+                    const HYSTERESIS: f32 = 5.0;
                     let mut best_acc: Option<&ManagedAccount> = None;
                     for acc in &self.config.accounts {
-                        if acc.is_valid && acc.id != *active_id {
-                            if best_acc.is_none()
-                                || acc.usage_percent < best_acc.unwrap().usage_percent
-                            {
+                        if acc.is_valid && acc.id != *active_id
+                            && acc.info_status == crate::models::AccountInfoStatus::Fresh
+                            && acc.usage_percent < threshold
+                            && active_usage - acc.usage_percent >= HYSTERESIS
+                        {
+                            let better = best_acc
+                                .map(|b| acc.usage_percent < b.usage_percent)
+                                .unwrap_or(true);
+                            if better {
                                 best_acc = Some(acc);
                             }
                         }
@@ -47,7 +57,8 @@ impl AtomcodeSwitchApp {
                     if let Some(acc_to_switch) = best_acc {
                         let id_to_switch = acc_to_switch.id.clone();
                         let name = acc_to_switch.auth_data.user.name.clone();
-                        self.switch_to_account(&id_to_switch);
+                        // 自动切换属于程序性切换，不打开更新窗口
+                        self.switch_to_account_silent(&id_to_switch);
                         self.status_message = self.i18n.t1("status_auto_switched", &name);
                     }
                 }
@@ -56,49 +67,38 @@ impl AtomcodeSwitchApp {
     }
 
     /// 判断账号信息是否已过期（重置时间已过且未解析出新数据）
+    /// 与倒计时、排序共用 `parse_reset_datetime` 单一解析入口，兼容新旧格式。
     pub fn is_account_expired(&self, acc: &ManagedAccount) -> bool {
-        let trimmed = acc.reset_time.trim();
         let now = chrono::Local::now();
-
-        // YYYY-MM-DD HH:MM 格式
-        if trimmed.len() >= 16
-            && trimmed.as_bytes()[4] == b'-'
-            && trimmed.as_bytes()[7] == b'-'
-            && trimmed.as_bytes()[10] == b' '
-            && trimmed.as_bytes()[13] == b':'
-        {
-            if let Ok(target_dt) = chrono::NaiveDateTime::parse_from_str(trimmed, "%Y-%m-%d %H:%M") {
-                let target = target_dt.and_local_timezone(chrono::Local).unwrap();
-                return target < now;
-            }
-        }
-
-        // 兼容旧的 HH:MM 格式
-        if trimmed.len() >= 5 && trimmed.as_bytes()[2] == b':' {
-            let (h_str, m_str) = trimmed.split_at(2);
-            let m_str = &m_str[1..];
-            if let (Ok(target_h), Ok(target_m)) = (h_str.parse::<u32>(), m_str.parse::<u32>()) {
-                let target_secs = target_h * 3600 + target_m * 60;
-                let now_secs = now.hour() * 3600 + now.minute() * 60 + now.second();
-                return target_secs <= now_secs;
-            }
-        }
-
-        false
+        parse_reset_datetime(&acc.reset_time, now)
+            .map(|target| target < now)
+            .unwrap_or(false)
     }
 
     /// 切换到账号；若开启了「过期自动更新」且目标账号信息已过期，
     /// 自动打开更新信息窗口并触发自动获取 + 解析更新
     pub fn switch_to_account(&mut self, id: &str) {
+        self.switch_to_account_impl(id, true);
+    }
+
+    /// 程序性切换（自动切换、删除后补位等）：不打开更新窗口，避免意外弹窗
+    pub fn switch_to_account_silent(&mut self, id: &str) {
+        self.switch_to_account_impl(id, false);
+    }
+
+    fn switch_to_account_impl(&mut self, id: &str, open_update_on_expired: bool) {
         if let Some(acc) = self.config.accounts.iter().find(|a| a.id == id) {
             let expired = self.is_account_expired(acc);
             match atomcode_io::write_auth(&self.config.custom_atomcode_dir, &acc.auth_data) {
                 Ok(_) => {
                     self.config.active_account_id = Some(id.to_string());
-                    config_io::save_config(&self.config);
-                    self.status_message = self.i18n.t1("status_switched", &acc.auth_data.user.name);
-                    if self.config.auto_update_on_switch_expired && expired {
-                        self.open_auto_update_window();
+                    let name = acc.auth_data.user.name.clone();
+                    // `acc` 至此不再使用，借用释放后可调用 &mut self 方法
+                    if self.persist_config() {
+                        self.status_message = self.i18n.t1("status_switched", &name);
+                        if open_update_on_expired && self.config.auto_update_on_switch_expired && expired {
+                            self.open_auto_update_window();
+                        }
                     }
                 }
                 Err(e) => {
@@ -110,10 +110,9 @@ impl AtomcodeSwitchApp {
 
     /// 打开更新信息窗口并自动获取，获取完成后自动解析更新
     pub fn open_auto_update_window(&mut self) {
+        self.reset_for_new_fetch();
         self.show_manual_update = true;
         self.manual_update_text.clear();
-        self.is_auto_updating = false;
-        self.auto_update_rx = None;
         self.auto_parse_pending = true;
         self.clear_update_message();
         self.start_auto_update();
@@ -131,19 +130,21 @@ impl AtomcodeSwitchApp {
             } else {
                 self.config.accounts.push(ManagedAccount {
                     id: id.clone(),
-                    plan_name: "CodingPlan Lite".to_string(),
+                    plan_name: self.i18n.t0("account_plan_unknown"),
                     usage_percent: 0.0,
                     reset_time: Self::default_reset_time(),
                     is_valid: true,
                     auth_data: auth,
-                    remaining_days: 27,
+                    remaining_days: 0,
                     last_updated: Self::current_time_str(),
+                    info_status: crate::models::AccountInfoStatus::Unknown,
                 });
             }
 
             self.config.active_account_id = Some(id);
-            config_io::save_config(&self.config);
-            self.status_message = self.i18n.t1("status_imported", &name);
+            if self.persist_config() {
+                self.status_message = self.i18n.t1("status_imported_hint", &name);
+            }
         } else {
             self.status_message = self.i18n.t0("status_auth_not_found");
         }
@@ -156,11 +157,12 @@ impl AtomcodeSwitchApp {
             self.config.active_account_id = self.config.accounts.first().map(|a| a.id.clone());
             let new_active_id = self.config.active_account_id.clone();
             if let Some(new_id) = new_active_id {
-                self.switch_to_account(&new_id);
+                self.switch_to_account_silent(&new_id);
             }
         }
-        config_io::save_config(&self.config);
-        self.status_message = self.i18n.t0("status_account_deleted");
+        if self.persist_config() {
+            self.status_message = self.i18n.t0("status_account_deleted");
+        }
     }
 
     // ---- 时间工具 ----
@@ -174,25 +176,6 @@ impl AtomcodeSwitchApp {
     pub fn default_reset_time() -> String {
         let target = chrono::Local::now() + chrono::Duration::hours(1);
         target.format("%Y-%m-%d %H:%M").to_string()
-    }
-
-    /// 根据今天的日期和 HH:MM 组合完整重置时间
-    /// 若该 HH:MM 今天已过，则视为明天
-    fn combine_reset_datetime(today: &str, hm: &str, now: chrono::DateTime<chrono::Local>) -> String {
-        let parts: Vec<&str> = hm.split(':').collect();
-        let h: u32 = parts.get(0).and_then(|s| s.parse().ok()).unwrap_or(0);
-        let m: u32 = parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(0);
-
-        let target_secs = h * 3600 + m * 60;
-        let now_secs = now.hour() * 3600 + now.minute() * 60 + now.second();
-
-        let date = if target_secs > now_secs {
-            today.to_string()
-        } else {
-            (now + chrono::Duration::days(1)).format("%Y-%m-%d").to_string()
-        };
-
-        format!("{} {}", date, hm)
     }
 
     // ---- /login 输出解析 ----
@@ -244,13 +227,23 @@ impl AtomcodeSwitchApp {
                     }
 
                     let matched_id = self.config.accounts[matched_idx].id.clone();
+                    // 登录用户与当前激活账号不一致：把匹配账号的 auth 写入磁盘，
+                    // 否则调用方随后的 import_current_auth() 会读回旧账号并撤销本次切换。
+                    let matched_auth = self.config.accounts[matched_idx].auth_data.clone();
+                    if let Err(e) =
+                        atomcode_io::write_auth(&self.config.custom_atomcode_dir, &matched_auth)
+                    {
+                        return Err(e);
+                    }
                     self.config.active_account_id = Some(matched_id);
                     {
                         let new_acc = &mut self.config.accounts[matched_idx];
                         new_acc.last_updated = Self::current_time_str();
                         new_acc.is_valid = true;
                     }
-                    config_io::save_config(&self.config);
+                    if !self.persist_config() {
+                        return Err(self.status_message.clone());
+                    }
                     self.status_message = self.i18n.t1("status_updated_from_paste", login_name);
                     return Ok(());
                 }
@@ -271,138 +264,35 @@ impl AtomcodeSwitchApp {
             acc.is_valid = true;
         }
 
-        config_io::save_config(&self.config);
+        if !self.persist_config() {
+            return Err(self.status_message.clone());
+        }
         self.status_message = self.i18n.t0("status_updated_manual");
         Ok(())
     }
 
-    /// 将解析出的字段应用到 ManagedAccount（纯借用辅助方法）
-    /// 同时支持中文和英文格式的 /login 输出
+    /// 将解析出的字段事务性地应用到 ManagedAccount。
     ///
-    /// 返回是否至少成功解析出一个字段；返回 false 时不会修改 `acc` 的任何字段。
+    /// 解析逻辑在 `login_parser` 纯函数中完成；只有至少识别出一个字段时才写入，
+    /// 返回 false 时 `acc` 的任何字段都不变。同时支持中文和英文的 /login 输出。
     pub fn apply_parsed_fields(acc: &mut ManagedAccount, text: &str) -> bool {
-        let mut parsed_any = false;
-
-        // ---- 套餐名 ----
-        // 中文：套餐：CodingPlan Lite · expires ...
-        // 英文：Plan: CodingPlan Lite  ·  expires ...
-        if let Some(start) = text.find("套餐：") {
-            let after = &text[start + "套餐：".len()..];
-            if let Some(end) = after.find("·") {
-                acc.plan_name = after[..end].trim().to_string();
-                parsed_any = true;
-            } else if let Some(end) = after.find('\n') {
-                acc.plan_name = after[..end].trim().to_string();
-                parsed_any = true;
-            }
-        } else if let Some(start) = text.find("Plan:") {
-            let after = &text[start + "Plan:".len()..];
-            if let Some(end) = after.find("·") {
-                acc.plan_name = after[..end].trim().to_string();
-                parsed_any = true;
-            } else if let Some(end) = after.find('\n') {
-                acc.plan_name = after[..end].trim().to_string();
-                parsed_any = true;
-            }
+        let fields = parse_login_fields(text, chrono::Local::now());
+        if fields.is_empty() {
+            return false;
         }
-
-        // ---- 剩余天数 ----
-        // 中文：剩余 19 天
-        // 英文：expires ... (19d / 30d remaining)
-        let mut days_found = false;
-        if let Some(pos) = text.find("剩余 ") {
-            let rest = &text[pos + "剩余 ".len()..];
-            let days_str: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
-            if !days_str.is_empty() {
-                if let Ok(days) = days_str.parse::<u32>() {
-                    acc.remaining_days = days;
-                    days_found = true;
-                    parsed_any = true;
-                }
-            }
+        if let Some(plan) = fields.plan_name {
+            acc.plan_name = plan;
         }
-        if !days_found {
-            // 英文：找 "d /" 前面的数字
-            if let Some(pos) = text.find("d /") {
-                let before = &text[..pos];
-                let digits: String = before
-                    .chars()
-                    .rev()
-                    .take_while(|c| c.is_ascii_digit())
-                    .collect::<String>()
-                    .chars()
-                    .rev()
-                    .collect();
-                if !digits.is_empty() {
-                    if let Ok(days) = digits.parse::<u32>() {
-                        acc.remaining_days = days;
-                        parsed_any = true;
-                    }
-                }
-            }
+        if let Some(usage) = fields.usage_percent {
+            acc.usage_percent = usage;
         }
-
-        // ---- 用量百分比 ----
-        // 中文：用量约 0%
-        // 英文：Usage: 当前时间窗口用量约 0%
-        if let Some(pos) = text.find("用量约") {
-            let rest = &text[pos + "用量约".len()..];
-            let num_str: String = rest
-                .chars()
-                .skip_while(|c| c.is_whitespace())
-                .take_while(|c| c.is_ascii_digit() || *c == '.')
-                .collect();
-            if !num_str.is_empty() {
-                if let Ok(pct) = num_str.parse::<f32>() {
-                    acc.usage_percent = pct;
-                    parsed_any = true;
-                }
-            }
+        if let Some(reset) = fields.reset_time {
+            acc.reset_time = reset;
         }
-
-        // ---- 重置时间 ----
-        // 中文：重置于 21:04 (in ...)
-        // 英文：resets 21:04 (in ...)
-        let now = chrono::Local::now();
-        let today = now.format("%Y-%m-%d").to_string();
-        let mut reset_found = false;
-        for line in text.lines() {
-            if line.contains("重置于") {
-                if let Some(after) = line.split("重置于").nth(1) {
-                    let raw = after.trim().to_string();
-                    // 提取 HH:MM 部分（前5个字符）
-                    let hm = if raw.len() >= 5 && raw.as_bytes()[2] == b':' {
-                        raw[..5].to_string()
-                    } else {
-                        raw
-                    };
-                    // 组合日期和时间，若重置时间已过则视为明天
-                    acc.reset_time = Self::combine_reset_datetime(&today, &hm, now);
-                    parsed_any = true;
-                }
-                reset_found = true;
-                break;
-            }
+        if let Some(days) = fields.remaining_days {
+            acc.remaining_days = days;
         }
-        if !reset_found {
-            for line in text.lines() {
-                if line.contains("resets ") || line.contains("resets\t") {
-                    if let Some(after) = line.split("resets").nth(1) {
-                        let raw = after.trim().to_string();
-                        // 提取 HH:MM 部分（前5个字符）
-                        let hm = if raw.len() >= 5 && raw.as_bytes()[2] == b':' {
-                            raw[..5].to_string()
-                        } else {
-                            raw
-                        };
-                        acc.reset_time = Self::combine_reset_datetime(&today, &hm, now);
-                        parsed_any = true;
-                    }
-                    break;
-                }
-            }
-        }
-
-        parsed_any
+        acc.info_status = crate::models::AccountInfoStatus::Fresh;
+        true
     }
 }

@@ -1,30 +1,26 @@
+use super::{atomic_write_text, backup_file};
 use crate::models::AppConfig;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 
-/// 获取用户主目录
+/// 获取用户主目录：Windows 下优先 USERPROFILE，避免 Git Bash 的 POSIX 风格 HOME
+/// 被 `PathBuf::from` 解析成当前盘根下的错误路径。
 fn home_dir() -> Option<PathBuf> {
-    std::env::var("HOME")
-        .or_else(|_| std::env::var("USERPROFILE"))
-        .map(PathBuf::from)
-        .ok()
+    #[cfg(windows)]
+    let value = std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME"));
+    #[cfg(not(windows))]
+    let value = std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE"));
+    value.map(PathBuf::from).ok()
 }
 
 /// 本地配置（保存在可执行程序同目录下的 config.yaml）
 /// 存储数据目录路径等本地设施配置。只在修改默认值时创建此文件。
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
 pub struct LocalConfig {
     /// 自定义数据目录路径（默认 ~/.atomcode-switch）
     pub custom_data_dir: Option<String>,
-}
-
-impl Default for LocalConfig {
-    fn default() -> Self {
-        Self {
-            custom_data_dir: None,
-        }
-    }
 }
 
 /// 获取可执行程序所在目录
@@ -44,7 +40,14 @@ fn get_local_config_path() -> PathBuf {
 fn load_local_config() -> LocalConfig {
     let path = get_local_config_path();
     if let Ok(content) = fs::read_to_string(&path) {
-        serde_yaml::from_str(&content).unwrap_or_default()
+        match serde_yaml::from_str(&content) {
+            Ok(config) => config,
+            Err(e) => {
+                eprintln!("local config parse failed ({}): {e}", path.display());
+                let _ = backup_file(&path);
+                LocalConfig::default()
+            }
+        }
     } else {
         LocalConfig::default()
     }
@@ -53,12 +56,18 @@ fn load_local_config() -> LocalConfig {
 /// 保存本地配置
 fn save_local_config(config: &LocalConfig) {
     let path = get_local_config_path();
-    if config.custom_data_dir.is_some() {
-        if let Ok(content) = serde_yaml::to_string(config) {
-            let _ = fs::write(&path, content);
+    let result = if config.custom_data_dir.is_some() {
+        match serde_yaml::to_string(config) {
+            Ok(content) => atomic_write_text(&path, &content),
+            Err(e) => Err(e.to_string()),
         }
+    } else if path.exists() {
+        fs::remove_file(&path).map_err(|e| e.to_string())
     } else {
-        let _ = fs::remove_file(&path);
+        Ok(())
+    };
+    if let Err(e) = result {
+        eprintln!("save local config failed ({}): {e}", path.display());
     }
 }
 
@@ -107,44 +116,49 @@ fn migrate_old_config_if_needed() {
                 let _ = fs::remove_file(&old_path);
                 return;
             }
-            // 尝试解析旧文件内容并写入新位置
+            // 尝试解析旧文件内容并写入新位置（原子写）
             if serde_yaml::from_str::<AppConfig>(&content).is_ok() {
-                if fs::write(&new_path, &content).is_ok() {
+                if atomic_write_text(&new_path, &content).is_ok() {
                     let _ = fs::remove_file(&old_path);
                 }
+            } else {
+                eprintln!(
+                    "legacy config parse failed ({}), original kept",
+                    old_path.display()
+                );
+                let _ = backup_file(&old_path);
             }
         }
     }
 }
 
-/// 加载账号配置
-pub fn load_config() -> AppConfig {
+/// 加载账号配置，返回 `(配置, 加载错误)`。
+///
+/// 解析失败时备份原文件并回退到默认配置，避免后续保存静默清空账号数据；
+/// 错误信息交由 UI 显示，便于用户发现数据异常。
+pub fn load_config() -> (AppConfig, Option<String>) {
     // 首次加载时自动迁移旧数据
     migrate_old_config_if_needed();
 
     let path = get_accounts_file_path();
-    // 确保数据目录存在
-    if let Some(parent) = path.parent() {
-        if !parent.exists() {
-            let _ = fs::create_dir_all(parent);
-        }
-    }
     if let Ok(content) = fs::read_to_string(&path) {
-        serde_yaml::from_str(&content).unwrap_or_default()
+        match serde_yaml::from_str(&content) {
+            Ok(config) => (config, None),
+            Err(e) => {
+                eprintln!("accounts config parse failed ({}): {e}", path.display());
+                // 备份损坏文件，便于用户人工恢复后再决定是否覆盖
+                let _ = backup_file(&path);
+                (AppConfig::default(), Some(e.to_string()))
+            }
+        }
     } else {
-        AppConfig::default()
+        (AppConfig::default(), None)
     }
 }
 
-/// 保存账号配置
-pub fn save_config(config: &AppConfig) {
+/// 保存账号配置。返回写入错误，调用方需显式处理，避免静默丢数据。
+pub fn save_config(config: &AppConfig) -> Result<(), String> {
     let path = get_accounts_file_path();
-    if let Some(parent) = path.parent() {
-        if !parent.exists() {
-            let _ = fs::create_dir_all(parent);
-        }
-    }
-    if let Ok(content) = serde_yaml::to_string(config) {
-        let _ = fs::write(&path, content);
-    }
+    let content = serde_yaml::to_string(config).map_err(|e| e.to_string())?;
+    atomic_write_text(&path, &content)
 }

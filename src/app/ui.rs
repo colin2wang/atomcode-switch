@@ -4,15 +4,23 @@ use crate::app::{AtomcodeSwitchApp, SettingsState};
 use crate::models::AppConfig;
 use crate::io::{atomcode_io, config_io};
 use crate::app::theme;
-use chrono::Timelike;
+use crate::ops::time_utils::parse_reset_datetime;
 use eframe::egui;
 use theme::*;
+
+/// 卡片渲染期间收集的延迟动作：渲染阶段只借用账号引用，循环结束后统一执行
+enum CardAction {
+    Switch(String),
+    Delete(String),
+    OpenUpdate,
+}
 
 impl eframe::App for AtomcodeSwitchApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         let current_time = ctx.input(|i| i.time);
         self.check_auto_switch(current_time);
         self.poll_auto_fetch();
+        self.poll_update_window_close();
 
         ctx.request_repaint_after(std::time::Duration::from_secs(1));
 
@@ -55,8 +63,9 @@ impl eframe::App for AtomcodeSwitchApp {
                                 };
                                 self.i18n = crate::i18n::I18n::load(new_lang);
                                 self.config.language = new_lang.as_str().to_string();
-                                config_io::save_config(&self.config);
-                                self.status_message = self.i18n.t0("status_ready");
+                                if self.persist_config() {
+                                    self.status_message = self.i18n.t0("status_ready");
+                                }
                             }
 
                             // 设置
@@ -151,8 +160,9 @@ impl eframe::App for AtomcodeSwitchApp {
                         match atomcode_io::clear_auth(&self.config.custom_atomcode_dir) {
                             Ok(_) => {
                                 self.config.active_account_id = None;
-                                config_io::save_config(&self.config);
-                                self.status_message = self.i18n.t0("status_auth_cleared");
+                                if self.persist_config() {
+                                    self.status_message = self.i18n.t0("status_auth_cleared");
+                                }
                             }
                             Err(e) => {
                                 self.status_message = self.i18n.t1("status_clear_failed", &e);
@@ -191,19 +201,44 @@ impl eframe::App for AtomcodeSwitchApp {
                             // 当前使用中的账号指示器 + 排序按钮（同一行）
                             self.render_active_indicator(ui);
 
-                            // 账号卡片列表（按当前排序方式排列）
-                            let mut accounts = self.config.accounts.clone();
-                            self.sort_accounts(&mut accounts);
-                            let active_id = self.config.active_account_id.clone();
-
-                            for acc in &accounts {
-                                let is_active = active_id.as_deref() == Some(acc.id.as_str());
-                                self.render_account_card(ui, acc, is_active);
+                            // 账号卡片列表（按当前排序方式排列）。
+                            // 仅借用账号引用，避免每帧 clone 完整 auth token；
+                            // 渲染期间收集动作，循环结束后统一执行。
+                            let mut actions: Vec<CardAction> = Vec::new();
+                            {
+                                let mut accounts: Vec<&crate::models::ManagedAccount> =
+                                    self.config.accounts.iter().collect();
+                                self.sort_accounts(&mut accounts);
+                                let active_id = self.config.active_account_id.clone();
+                                for acc in accounts {
+                                    let is_active = active_id.as_deref() == Some(acc.id.as_str());
+                                    let action = std::cell::Cell::new(None::<CardAction>);
+                                    self.render_account_card(ui, acc, is_active, &action);
+                                    if let Some(a) = action.take() {
+                                        actions.push(a);
+                                    }
+                                }
                             }
 
                             // 空状态提示
-                            if accounts.is_empty() {
+                            if self.config.accounts.is_empty() {
                                 self.render_empty_state(ui);
+                            }
+
+                            // 账号引用借用已结束，统一执行渲染期间收集的动作
+                            for action in actions {
+                                match action {
+                                    CardAction::Switch(id) => self.switch_to_account(&id),
+                                    CardAction::Delete(id) => self.delete_confirm_id = Some(id),
+                                    CardAction::OpenUpdate => {
+                                        self.reset_for_new_fetch();
+                                        self.show_manual_update = true;
+                                        self.manual_update_text.clear();
+                                        self.auto_parse_pending = true;
+                                        self.clear_update_message();
+                                        self.start_auto_update();
+                                    }
+                                }
                             }
                         });
                     });
@@ -273,7 +308,7 @@ impl AtomcodeSwitchApp {
                 .with_inner_size([520.0, 380.0])
                 .with_min_inner_size([420.0, 300.0]),
             |ctx, class| {
-                assert!(class == egui::ViewportClass::Immediate);
+                debug_assert!(class == egui::ViewportClass::Immediate);
 
                 // 底部按钮面板：先声明，保证始终贴底且可见
                 egui::TopBottomPanel::bottom("manual_update_buttons")
@@ -320,7 +355,7 @@ impl AtomcodeSwitchApp {
                                                 crate::app::UpdateMessageKind::Success,
                                                 msg,
                                             );
-                                            self.show_manual_update = false;
+                                            self.schedule_update_window_close(std::time::Duration::from_millis(1500));
                                         }
                                         Err(e) => {
                                             // 解析失败：窗口保留、原始内容保留，消息区显示失败原文
@@ -337,8 +372,7 @@ impl AtomcodeSwitchApp {
                                 egui::Layout::right_to_left(egui::Align::Center),
                                 |ui| {
                                     if ui.button(self.i18n.t0("btn_cancel")).clicked() {
-                                        self.show_manual_update = false;
-                                        self.clear_update_message();
+                                        self.close_update_window();
                                     }
                                 },
                             );
@@ -365,33 +399,33 @@ impl AtomcodeSwitchApp {
                                 );
                                 if ui
                                     .add(
-                                        egui::Button::new(
-                                            egui::RichText::new(self.i18n.t0("update_cancel")).size(12.0),
-                                        )
-                                        .rounding(4.0)
-                                        .fill(GITHUB_RED),
+                                        style_button_danger(
+                                            egui::Button::new(
+                                                egui::RichText::new(self.i18n.t0("update_cancel")).size(12.0),
+                                            ),
+                                        ),
                                     )
                                     .clicked()
                                 {
-                                    self.is_auto_updating = false;
-                                    self.auto_update_rx = None;
+                                    self.cancel_auto_fetch();
                                     self.status_message = self.i18n.t0("status_auto_fetch_cancelled");
                                 }
                             } else {
                                 if ui
                                     .add(
-                                        egui::Button::new(
-                                            egui::RichText::new(self.i18n.t0("update_auto_fetch"))
-                                                .size(13.0)
-                                                .color(egui::Color32::WHITE),
-                                        )
-                                        .rounding(4.0)
-                                        .fill(GITHUB_BLUE),
+                                        style_button_primary(
+                                            egui::Button::new(
+                                                egui::RichText::new(self.i18n.t0("update_auto_fetch"))
+                                                    .size(13.0)
+                                                    .color(egui::Color32::WHITE),
+                                            ),
+                                        ),
                                     )
                                     .clicked()
                                 {
                                     self.manual_update_text.clear();
                                     // 重新获取成功后自动解析更新
+                                    self.reset_for_new_fetch();
                                     self.clear_update_message();
                                     self.auto_parse_pending = true;
                                     self.start_auto_update();
@@ -409,17 +443,17 @@ impl AtomcodeSwitchApp {
                             Info => (
                                 String::new(),
                                 GITHUB_BLUE,
-                                egui::Color32::from_rgb(233, 244, 255),
+                                MSG_INFO_BG,
                             ),
                             Success => (
                                 self.i18n.t0("update_success_title"),
                                 GITHUB_GREEN,
-                                egui::Color32::from_rgb(233, 250, 233),
+                                MSG_SUCCESS_BG,
                             ),
                             Error => (
                                 self.i18n.t0("update_error_title"),
                                 GITHUB_RED,
-                                egui::Color32::from_rgb(255, 238, 238),
+                                MSG_ERROR_BG,
                             ),
                         };
 
@@ -465,8 +499,7 @@ impl AtomcodeSwitchApp {
 
                 // 点击系统标题栏 X 时关闭子窗口
                 if ctx.input(|i| i.viewport().close_requested()) {
-                    self.show_manual_update = false;
-                    self.clear_update_message();
+                    self.close_update_window();
                 }
             },
         );
@@ -519,7 +552,7 @@ impl AtomcodeSwitchApp {
                 .clicked()
             {
                 self.config.sort_mode = crate::models::SortMode::None;
-                config_io::save_config(&self.config);
+                let _ = self.persist_config();
             }
             if ui
                 .selectable_label(
@@ -533,7 +566,7 @@ impl AtomcodeSwitchApp {
                 .clicked()
             {
                 self.config.sort_mode = crate::models::SortMode::WindowRemaining;
-                config_io::save_config(&self.config);
+                let _ = self.persist_config();
             }
             if ui
                 .selectable_label(
@@ -547,14 +580,20 @@ impl AtomcodeSwitchApp {
                 .clicked()
             {
                 self.config.sort_mode = crate::models::SortMode::ResetTime;
-                config_io::save_config(&self.config);
+                let _ = self.persist_config();
             }
         });
         ui.add_space(12.0);
     }
 
     /// 渲染账号卡片
-    fn render_account_card(&mut self, ui: &mut egui::Ui, acc: &crate::models::ManagedAccount, is_active: bool) {
+    fn render_account_card(
+        &self,
+        ui: &mut egui::Ui,
+        acc: &crate::models::ManagedAccount,
+        is_active: bool,
+        action: &std::cell::Cell<Option<CardAction>>,
+    ) {
         egui::Frame::default()
             .fill(egui::Color32::WHITE)
             .rounding(10.0)
@@ -592,7 +631,7 @@ impl AtomcodeSwitchApp {
                             ui.label(
                                 egui::RichText::new(&acc.auth_data.user.name)
                                     .size(15.0)
-                                    .color(egui::Color32::from_rgb(33, 37, 41))
+                                    .color(CARD_NAME_TEXT)
                                     .strong(),
                             );
                             ui.add_space(4.0);
@@ -600,20 +639,20 @@ impl AtomcodeSwitchApp {
                                 ui.label(
                                     egui::RichText::new(self.i18n.t0("card_valid"))
                                         .size(11.0)
-                                        .color(egui::Color32::from_rgb(40, 167, 69)),
+                                        .color(CARD_VALID),
                                 );
                             } else {
                                 ui.label(
                                     egui::RichText::new(self.i18n.t0("card_invalid"))
                                         .size(11.0)
-                                        .color(egui::Color32::from_rgb(220, 53, 69)),
+                                        .color(CARD_INVALID),
                                 );
                             }
                         });
                         ui.label(
                             egui::RichText::new(&acc.auth_data.user.id)
                                 .size(11.0)
-                                .color(egui::Color32::from_rgb(108, 117, 125)),
+                                .color(CARD_SECONDARY_TEXT),
                         );
                     });
 
@@ -627,10 +666,10 @@ impl AtomcodeSwitchApp {
                                         .color(egui::Color32::WHITE),
                                 )
                                 .rounding(4.0)
-                                .fill(egui::Color32::from_rgb(13, 110, 253)),
+                                .fill(CARD_SWITCH_BLUE),
                             );
                             if switch_btn.clicked() {
-                                self.switch_to_account(&acc.id);
+                                action.set(Some(CardAction::Switch(acc.id.clone())));
                             }
                         } else {
                             ui.horizontal(|ui| {
@@ -642,7 +681,7 @@ impl AtomcodeSwitchApp {
                                             .color(GITHUB_GREEN),
                                     )
                                     .rounding(4.0)
-                                    .fill(egui::Color32::from_rgb(220, 255, 220))
+                                    .fill(CARD_ACTIVATED_BG)
                                     .stroke(egui::Stroke::new(1.0_f32, GITHUB_GREEN)),
                                 );
                                 ui.add_space(6.0);
@@ -659,14 +698,7 @@ impl AtomcodeSwitchApp {
                                     )
                                     .clicked()
                                 {
-                                    self.show_manual_update = true;
-                                    self.manual_update_text.clear();
-                                    // 打开窗口时自动触发一次获取，成功后自动解析更新
-                                    self.is_auto_updating = false;
-                                    self.auto_update_rx = None;
-                                    self.auto_parse_pending = true;
-                                    self.clear_update_message();
-                                    self.start_auto_update();
+                                    action.set(Some(CardAction::OpenUpdate));
                                 }
                             });
                         }
@@ -685,7 +717,7 @@ impl AtomcodeSwitchApp {
                                 )
                                 .clicked()
                             {
-                                self.delete_confirm_id = Some(acc.id.clone());
+                                action.set(Some(CardAction::Delete(acc.id.clone())));
                             }
                         }
                     });
@@ -705,7 +737,7 @@ impl AtomcodeSwitchApp {
                         ui.label(
                             egui::RichText::new(self.i18n.t1("card_remaining_days", &acc.remaining_days.to_string()))
                                 .size(12.0)
-                                .color(egui::Color32::from_rgb(108, 117, 125)),
+                                .color(CARD_SECONDARY_TEXT),
                         );
                     });
                 });
@@ -716,7 +748,7 @@ impl AtomcodeSwitchApp {
                     ui.label(
                         egui::RichText::new(self.i18n.t0("card_usage_label"))
                             .size(12.0)
-                            .color(egui::Color32::from_rgb(108, 117, 125)),
+                            .color(CARD_SECONDARY_TEXT),
                     );
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         ui.label(
@@ -765,7 +797,7 @@ impl AtomcodeSwitchApp {
                         ui.label(
                             egui::RichText::new(format!("{}", acc.last_updated))
                                 .size(11.0)
-                                .color(egui::Color32::from_rgb(108, 117, 125)),
+                                .color(CARD_SECONDARY_TEXT),
                         );
                     });
                 });
@@ -813,6 +845,7 @@ impl AtomcodeSwitchApp {
                 auto_switch_enabled: self.config.auto_switch_rules.enabled,
                 max_usage_percent: self.config.auto_switch_rules.max_usage_percent,
                 auto_update_on_switch_expired: self.config.auto_update_on_switch_expired,
+                pending_import_data_dir: None,
             });
         }
 
@@ -863,39 +896,22 @@ impl AtomcodeSwitchApp {
                             if let Some(dir) =
                                 tinyfiledialogs::select_folder_dialog(&self.i18n.t0("dialog_select_data_dir"), &state.data_dir)
                             {
-                                // inline: 检查目标目录是否已有 atomcode-accounts.yaml
+                                // 浏览只更新临时目录；实际导入在「确定」时执行。
+                                // 若目标目录已有数据，先弹出冲突确认。
                                 let accounts_path = std::path::Path::new(&dir)
                                     .join("atomcode-accounts.yaml");
+                                let mut confirmed_import = true;
                                 if accounts_path.exists() {
-                                    let existing_accounts = std::fs::read_to_string(&accounts_path)
-                                        .ok()
-                                        .and_then(|c| serde_yaml::from_str::<AppConfig>(&c).ok())
-                                        .map(|c| c.accounts)
-                                        .unwrap_or_default();
-
-                                    let existing_names: Vec<String> = existing_accounts
-                                        .iter()
-                                        .map(|a| format!("  - {}（{}）", a.auth_data.user.name, a.auth_data.user.username))
-                                        .collect();
-                                    let current_names: Vec<String> = self
-                                        .config
-                                        .accounts
-                                        .iter()
-                                        .map(|a| format!("  - {}（{}）", a.auth_data.user.name, a.auth_data.user.username))
-                                        .collect();
-
-                                    let none_label = self.i18n.t0("dialog_none");
-                                    let existing_list = if existing_names.is_empty() { none_label.clone() } else { existing_names.join("\n") };
-                                    let current_list = if current_names.is_empty() { none_label } else { current_names.join("\n") };
+                                    let existing = Self::load_accounts_from(&accounts_path);
+                                    let existing_accounts = existing.as_ref().map(|c| c.accounts.as_slice()).unwrap_or(&[]);
                                     let msg = self.i18n.t4(
                                         "dialog_switch_dir_msg",
                                         &existing_accounts.len().to_string(),
-                                        &existing_list,
+                                        &Self::format_account_lines(&self.i18n, existing_accounts),
                                         &self.config.accounts.len().to_string(),
-                                        &current_list,
+                                        &Self::format_account_lines(&self.i18n, &self.config.accounts),
                                     );
-
-                                    let should_import = matches!(
+                                    confirmed_import = matches!(
                                         tinyfiledialogs::message_box_yes_no(
                                             &self.i18n.t0("dialog_switch_dir_title"),
                                             &msg,
@@ -904,22 +920,14 @@ impl AtomcodeSwitchApp {
                                         ),
                                         tinyfiledialogs::YesNo::Yes
                                     );
-
-                                    if should_import {
-                                        if let Some(config) = std::fs::read_to_string(&accounts_path)
-                                            .ok()
-                                            .and_then(|c| serde_yaml::from_str::<AppConfig>(&c).ok())
-                                        {
-                                            self.config.accounts = config.accounts;
-                                            self.config.active_account_id = config.active_account_id;
-                                            self.config.auto_switch_rules = config.auto_switch_rules;
-                                            self.status_message = self.i18n.t1("status_imported_count", &self.config.accounts.len().to_string());
-                                        }
-                                    } else {
-                                        self.status_message = self.i18n.t0("status_kept_current");
-                                    }
                                 }
-                                state.data_dir = dir;
+                                if confirmed_import {
+                                    let accounts_path = std::path::Path::new(&dir).join("atomcode-accounts.yaml");
+                                    if accounts_path.exists() {
+                                        state.pending_import_data_dir = Some(dir.clone());
+                                    }
+                                    state.data_dir = dir;
+                                }
                             }
                         }
                     });
@@ -996,7 +1004,16 @@ impl AtomcodeSwitchApp {
             });
 
         if save {
-            if let Some(ref state) = self.settings_state {
+            if let Some(state) = self.settings_state.take() {
+                // 「确定」时才真正导入目标目录中的账号
+                if let Some(dir) = state.pending_import_data_dir {
+                    let accounts_path = std::path::Path::new(&dir).join("atomcode-accounts.yaml");
+                    if let Some(config) = Self::load_accounts_from(&accounts_path) {
+                        self.config.accounts = config.accounts;
+                        self.config.active_account_id = config.active_account_id;
+                        self.config.auto_switch_rules = config.auto_switch_rules;
+                    }
+                }
                 config_io::set_custom_data_dir(
                     if state.data_dir.is_empty() {
                         None
@@ -1012,10 +1029,10 @@ impl AtomcodeSwitchApp {
                 self.config.auto_switch_rules.enabled = state.auto_switch_enabled;
                 self.config.auto_switch_rules.max_usage_percent = state.max_usage_percent;
                 self.config.auto_update_on_switch_expired = state.auto_update_on_switch_expired;
-                config_io::save_config(&self.config);
-                self.status_message = self.i18n.t0("status_settings_saved");
+                if self.persist_config() {
+                    self.status_message = self.i18n.t0("status_settings_saved");
+                }
             }
-            self.settings_state = None;
             self.show_settings = false;
         } else if cancel {
             self.settings_state = None;
@@ -1030,42 +1047,54 @@ impl AtomcodeSwitchApp {
 
     // ---- 内部辅助 ----
 
+    /// 把账号列表格式化为可显示的多行文本
+    fn format_account_lines(
+        i18n: &crate::i18n::I18n,
+        accounts: &[crate::models::ManagedAccount],
+    ) -> String {
+        if accounts.is_empty() {
+            return i18n.t0("dialog_none");
+        }
+        accounts
+            .iter()
+            .map(|a| {
+                i18n.t2(
+                    "dialog_account_line",
+                    &a.auth_data.user.name,
+                    &a.auth_data.user.username,
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    /// 读取指定 YAML 文件中的账号配置
+    fn load_accounts_from(path: &std::path::Path) -> Option<AppConfig> {
+        std::fs::read_to_string(path)
+            .ok()
+            .and_then(|c| serde_yaml::from_str::<AppConfig>(&c).ok())
+    }
+
     /// 处理导出按钮逻辑
     fn handle_export(&mut self) {
-        if let Some(path_str) = tinyfiledialogs::save_file_dialog(&self.i18n.t0("dialog_export_title"), "config.yaml") {
+        // 默认文件名与数据目录下的账号文件一致，避免用户按默认名导出后
+        // 在切换数据目录时找不到可导入的文件；同时不与本地 config.yaml 混淆。
+        if let Some(path_str) = tinyfiledialogs::save_file_dialog(&self.i18n.t0("dialog_export_title"), "atomcode-accounts.yaml") {
             let path = std::path::Path::new(&path_str);
             let should_overwrite = if path.exists() {
-                let existing_accounts = std::fs::read_to_string(path)
-                    .ok()
-                    .and_then(|c| serde_yaml::from_str::<AppConfig>(&c).ok())
-                    .map(|c| c.accounts)
-                    .unwrap_or_default();
-
-                let existing_names: Vec<String> = existing_accounts
-                    .iter()
-                    .map(|a| format!("  - {}（{}）", a.auth_data.user.name, a.auth_data.user.username))
-                    .collect();
-                let new_names: Vec<String> = self
-                    .config
-                    .accounts
-                    .iter()
-                    .map(|a| format!("  - {}（{}）", a.auth_data.user.name, a.auth_data.user.username))
-                    .collect();
-
-                let none_label = self.i18n.t0("dialog_none");
-                let existing_list = if existing_names.is_empty() { none_label.clone() } else { existing_names.join("\n") };
-                let new_list = if new_names.is_empty() { none_label } else { new_names.join("\n") };
+                let existing = Self::load_accounts_from(path);
+                let existing_accounts = existing.as_ref().map(|c| c.accounts.as_slice()).unwrap_or(&[]);
                 let msg = self.i18n.t4(
                     "dialog_overwrite_msg",
                     &existing_accounts.len().to_string(),
-                    &existing_list,
+                    &Self::format_account_lines(&self.i18n, existing_accounts),
                     &self.config.accounts.len().to_string(),
-                    &new_list,
+                    &Self::format_account_lines(&self.i18n, &self.config.accounts),
                 );
 
                 matches!(
                     tinyfiledialogs::message_box_yes_no(
-                        "导出冲突",
+                        &self.i18n.t0("dialog_overwrite_title"),
                         &msg,
                         tinyfiledialogs::MessageBoxIcon::Question,
                         tinyfiledialogs::YesNo::No,
@@ -1087,70 +1116,35 @@ impl AtomcodeSwitchApp {
         }
     }
 
-    /// 从重置时间实时计算倒计时，返回 (文本, 颜色)
+    /// 从重置时间实时计算倒计时，返回 (文本, 颜色)。
+    /// 与过期判断、排序共用 `parse_reset_datetime` 单一解析入口。
     fn format_reset_countdown(&self, reset_time: &str) -> (String, egui::Color32) {
-        let trimmed = reset_time.trim();
         let now = chrono::Local::now();
-
-        // 尝试解析 YYYY-MM-DD HH:MM 格式
-        if trimmed.len() >= 16 && trimmed.as_bytes()[4] == b'-' && trimmed.as_bytes()[7] == b'-' && trimmed.as_bytes()[10] == b' ' && trimmed.as_bytes()[13] == b':' {
-            if let Ok(target_dt) = chrono::NaiveDateTime::parse_from_str(trimmed, "%Y-%m-%d %H:%M") {
-                let target = target_dt.and_local_timezone(chrono::Local).unwrap();
-                let diff_secs = (target - now).num_seconds();
-                if diff_secs < 0 {
-                    return (self.i18n.t1("card_reset_expired", trimmed), GITHUB_YELLOW);
-                }
-                let diff = diff_secs as u64;
-                let minutes = diff / 60;
-                let seconds = diff % 60;
-                let text = if diff >= 3600 {
-                    self.i18n.t4("card_reset_countdown_h", trimmed, &(diff / 3600).to_string(), &(minutes % 60).to_string(), &seconds.to_string())
-                } else {
-                    self.i18n.t3("card_reset_countdown", trimmed, &minutes.to_string(), &seconds.to_string())
-                };
-                return (text, GITHUB_TEXT_SECONDARY);
-            }
+        let target = match parse_reset_datetime(reset_time, now) {
+            Some(t) => t,
+            None => return (self.i18n.t1("card_reset_label", reset_time), GITHUB_TEXT_SECONDARY),
+        };
+        let diff_secs = (target - now).num_seconds();
+        if diff_secs < 0 {
+            return (self.i18n.t1("card_reset_expired", reset_time.trim()), GITHUB_YELLOW);
         }
-
-        // 兼容旧的 HH:MM 格式
-        if trimmed.len() >= 5 && trimmed.as_bytes()[2] == b':' {
-            let (h_str, m_str) = trimmed.split_at(2);
-            let m_str = &m_str[1..];
-            if let Ok(target_h) = h_str.parse::<u32>() {
-                if let Ok(target_m) = m_str.parse::<u32>() {
-                    let target_secs = target_h * 3600 + target_m * 60;
-                    let now_secs = now.hour() * 3600 + now.minute() * 60 + now.second();
-                    let diff = if target_secs > now_secs {
-                        target_secs - now_secs
-                    } else {
-                        return (self.i18n.t1("card_reset_expired", trimmed), GITHUB_YELLOW);
-                    };
-                    let minutes = diff / 60;
-                    let seconds = diff % 60;
-                    let text = if diff >= 3600 {
-                        self.i18n.t4("card_reset_countdown_h", trimmed, &(diff / 3600).to_string(), &(minutes % 60).to_string(), &seconds.to_string())
-                    } else {
-                        self.i18n.t3("card_reset_countdown", trimmed, &minutes.to_string(), &seconds.to_string())
-                    };
-                    return (text, GITHUB_TEXT_SECONDARY);
-                }
-            }
-        }
-
-        (self.i18n.t1("card_reset_label", reset_time), GITHUB_TEXT_SECONDARY)
-    }
-
-    /// 解析重置时间为可排序的值（YYYY-MM-DD HH:MM），无法解析时返回 None
-    fn parse_reset_time_for_sort(reset_time: &str) -> Option<chrono::NaiveDateTime> {
-        chrono::NaiveDateTime::parse_from_str(reset_time.trim(), "%Y-%m-%d %H:%M").ok()
+        let diff = diff_secs as u64;
+        let minutes = diff / 60;
+        let seconds = diff % 60;
+        let text = if diff >= 3600 {
+            self.i18n.t4("card_reset_countdown_h", reset_time.trim(), &(diff / 3600).to_string(), &(minutes % 60).to_string(), &seconds.to_string())
+        } else {
+            self.i18n.t3("card_reset_countdown", reset_time.trim(), &minutes.to_string(), &seconds.to_string())
+        };
+        (text, GITHUB_TEXT_SECONDARY)
     }
 
     /// 按当前配置排序账号卡片：激活账号永远第一；主键为所选方式，另一项作次级键；
     /// 超时未更新的账号视为最差情况，固定排在最后
-    fn sort_accounts(&self, accounts: &mut [crate::models::ManagedAccount]) {
+    fn sort_accounts(&self, accounts: &mut [&crate::models::ManagedAccount]) {
         use crate::models::SortMode;
         let active_id = self.config.active_account_id.clone();
-        let now = chrono::Local::now().naive_local();
+        let now = chrono::Local::now();
         accounts.sort_by(|a, b| {
             // 不排序：不区分激活/超时，直接按名称排列
             if self.config.sort_mode == SortMode::None {
@@ -1162,8 +1156,8 @@ impl AtomcodeSwitchApp {
             if is_active_a != is_active_b {
                 return if is_active_a { std::cmp::Ordering::Less } else { std::cmp::Ordering::Greater };
             }
-            let reset_a = Self::parse_reset_time_for_sort(&a.reset_time);
-            let reset_b = Self::parse_reset_time_for_sort(&b.reset_time);
+            let reset_a = parse_reset_datetime(&a.reset_time, now);
+            let reset_b = parse_reset_datetime(&b.reset_time, now);
             let stale_a = reset_a.map(|t| t < now).unwrap_or(true);
             let stale_b = reset_b.map(|t| t < now).unwrap_or(true);
             // 超时未更新的排最后（其余照常排序）
