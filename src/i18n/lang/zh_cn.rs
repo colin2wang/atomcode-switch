@@ -64,6 +64,7 @@ pub fn get(key: &str) -> &str {
         "update_parse" => "解析并更新",
         "update_hint" => "在此粘贴 /login 的输出，或点击上方「重新获取」再次获取...",
         "update_error_title" => "解析失败，已保留原窗口与原始内容",
+        "update_parse_failed" => "解析失败: {0}",
         "update_error_hint" => "可点击「重新获取」重试，或修改上方内容后再次点击「解析并更新」",
         "update_success_title" => "解析成功",
 

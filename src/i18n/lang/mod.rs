@@ -56,7 +56,7 @@ pub const ALL_KEYS: &[&str] = &[
     "settings_enable_auto_switch", "settings_usage_exceeds", "settings_auto_switch_to",
     "settings_auto_update_on_switch_expired", "btn_confirm", "btn_cancel", "update_title",
     "update_desc", "update_auto_fetch", "update_fetching", "update_cancel", "update_parse",
-    "update_hint", "update_error_title", "update_error_hint", "update_success_title",
+    "update_hint", "update_error_title", "update_error_hint", "update_parse_failed", "update_success_title",
     "delete_confirm_title", "delete_confirm_msg", "btn_delete", "dialog_select_data_dir",
     "dialog_select_atomcode_dir", "dialog_export_title", "dialog_switch_dir_title",
     "dialog_overwrite_title", "dialog_switch_dir_msg", "dialog_overwrite_msg", "dialog_none",

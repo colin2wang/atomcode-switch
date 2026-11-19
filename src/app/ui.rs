@@ -358,11 +358,8 @@ impl AtomcodeSwitchApp {
                                             self.schedule_update_window_close(std::time::Duration::from_millis(1500));
                                         }
                                         Err(e) => {
-                                            // 解析失败：窗口保留、原始内容保留，消息区显示失败原文
-                                            self.set_update_message(
-                                                crate::app::UpdateMessageKind::Error,
-                                                e,
-                                            );
+                                            // 解析失败：窗口与原始内容保留，消息区显示「解析失败」
+                                            self.mark_parse_failed(e);
                                         }
                                     }
                                 }

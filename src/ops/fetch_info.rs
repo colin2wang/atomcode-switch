@@ -122,11 +122,8 @@ impl AtomcodeSwitchApp {
                     let err_buf = err_rx.recv_timeout(flush).unwrap_or_default();
                     let out_buf = out_rx.recv_timeout(flush).unwrap_or_default();
                     early_out.push_str(&out_buf);
-                    // 先判断标记，再移动 early_out 构造 combined，避免 move 后借用
-                    let has_marker = early_out.contains("套餐")
-                        || early_out.contains("Plan:")
-                        || early_out.contains("resets")
-                        || early_out.contains("重置于");
+                    // 合并 stdout/stderr：任何非空控制台输出都作为「已获取信息」
+                    // 返回，以便填入更新窗口输入框供用户查看。
                     let combined = if err_buf.trim().is_empty() {
                         early_out
                     } else {
@@ -138,9 +135,6 @@ impl AtomcodeSwitchApp {
                         } else {
                             Err(no_output_msg)
                         }
-                    } else if !has_marker && combined.trim() == err_buf.trim() {
-                        // 只有 stderr 输出且无有效字段，按错误处理
-                        Err(combined)
                     } else {
                         Ok(combined)
                     };
@@ -171,7 +165,7 @@ impl AtomcodeSwitchApp {
                 self.is_auto_updating = false;
                 match result {
                     Err(e) => {
-                        self.manual_update_text.clear();
+                        // 获取失败：错误信息显示在消息区，保留输入框内容不动
                         self.set_update_message(UpdateMessageKind::Error, e);
                     }
                     Ok(output) => {
@@ -181,21 +175,21 @@ impl AtomcodeSwitchApp {
                             let text = self.manual_update_text.clone();
                             if text.trim().is_empty() {
                                 let msg = self.i18n.t0("status_paste_empty");
-                                self.set_update_message(UpdateMessageKind::Error, msg);
+                                self.mark_parse_failed(msg);
                             } else if self.config.active_account_id.is_none() {
                                 let msg = self.i18n.t0("status_no_active_import");
-                                self.set_update_message(UpdateMessageKind::Error, msg);
+                                self.mark_parse_failed(msg);
                             } else {
                                 match self.parse_login_output_and_update(&text) {
                                     Ok(()) => {
                                         self.import_current_auth();
-                                        self.manual_update_text.clear();
+                                        // 保留获取到的控制台输出，便于在输入框内查看
                                         let msg = self.i18n.t0("status_updated");
                                         self.set_update_message(UpdateMessageKind::Success, msg);
                                         self.schedule_update_window_close(SUCCESS_DISPLAY);
                                     }
                                     Err(e) => {
-                                        self.set_update_message(UpdateMessageKind::Error, e);
+                                        self.mark_parse_failed(e);
                                     }
                                 }
                             }

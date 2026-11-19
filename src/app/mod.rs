@@ -101,8 +101,20 @@ impl AtomcodeSwitchApp {
     pub fn set_update_message(&mut self, kind: UpdateMessageKind, text: String) {
         if kind == UpdateMessageKind::Error {
             self.status_message = self.i18n.t1("status_update_failed", &text);
+            // 任何错误都必须保留窗口供重试：取消可能残留的延迟关窗定时器，
+            // 否则下一帧 poll_update_window_close 会关窗并清掉这条错误消息。
+            self.close_update_after = None;
+            self.auto_parse_pending = false;
         }
         self.update_message = Some(UpdateMessage { kind, text });
+    }
+
+    /// 解析失败：在窗口内显示明确的「解析失败」提示，保留窗口与输入框原文供重试。
+    pub fn mark_parse_failed(&mut self, detail: String) {
+        let text = self.i18n.t1("update_parse_failed", &detail);
+        self.close_update_after = None;
+        self.auto_parse_pending = false;
+        self.set_update_message(UpdateMessageKind::Error, text);
     }
 
     /// 清除「更新账号信息」窗口内的结果消息

@@ -64,6 +64,7 @@ pub fn get(key: &str) -> &str {
         "update_parse" => "Parse & Update",
         "update_hint" => "Paste /login output here, or click \"Re-fetch\" above...",
         "update_error_title" => "Parse failed — window and original content are kept",
+        "update_parse_failed" => "Parse failed: {0}",
         "update_error_hint" => "Click \"Re-fetch\" to retry, or edit the content above and click \"Parse & Update\" again",
         "update_success_title" => "Parsed successfully",
 
