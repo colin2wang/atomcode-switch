@@ -31,8 +31,9 @@ impl AtomcodeSwitchApp {
         self.auto_update_rx = Some(rx);
         self.is_auto_updating = true;
 
+        // 「正在获取」提示只显示在更新窗口内的消息区（气泡）；
+        // 不写主窗口状态栏，避免关窗后残留。
         let fetching_msg = self.i18n.t0("status_fetching");
-        self.status_message = fetching_msg.clone();
         self.set_update_message(UpdateMessageKind::Info, fetching_msg);
 
         // 错误文案在主线程先本地化，再 move 进后台线程（I18n 不是 Send）

@@ -106,7 +106,6 @@ pub fn get(key: &str) -> &str {
         "status_paste_empty" => "粘贴内容为空",
         "status_no_active_import" => "没有激活的账号，请先导入账号",
         "status_updated" => "账号信息已更新",
-        "status_update_failed" => "更新失败: {0}",
         "status_parse_no_fields" => "未能识别出任何账号信息（套餐 / 用量 / 剩余天数 / 重置时间），请确认内容是 atomcode /login 的完整输出",
         "status_auth_cleared" => "已清空当前登录",
         "status_clear_failed" => "清空失败: {0}",

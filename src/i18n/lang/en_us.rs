@@ -106,7 +106,6 @@ pub fn get(key: &str) -> &str {
         "status_paste_empty" => "Paste content is empty",
         "status_no_active_import" => "No active account, please import one first",
         "status_updated" => "Account info updated",
-        "status_update_failed" => "Update failed: {0}",
         "status_parse_no_fields" => "No account info recognized (plan / usage / remaining days / reset time); make sure this is the complete output of atomcode /login",
         "status_auth_cleared" => "Auth cleared",
         "status_clear_failed" => "Clear failed: {0}",

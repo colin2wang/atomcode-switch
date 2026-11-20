@@ -25,11 +25,20 @@ impl ParsedFields {
     }
 }
 
-/// 截取 `marker` 之后到 `·` 或换行之间的文本，作为套餐名。
+/// 截取 `marker` 之后到终止符之间的文本，作为套餐名。
+///
+/// 终止符：`·` 分隔符、全角/半角左括号、到期时间关键词、换行——
+/// 兼容 `套餐：X · …`、`套餐：X    到期时间 …（剩余 …）` 等多种输出格式。
 fn plan_after(text: &str, marker: &str) -> Option<String> {
     let start = text.find(marker)? + marker.len();
     let after = &text[start..];
-    let end = after.find('·').or_else(|| after.find('\n')).unwrap_or(after.len());
+    let end = ['·', '（', '(']
+        .iter()
+        .filter_map(|m| after.find(*m))
+        .chain(after.find("到期时间").into_iter())
+        .chain(after.find("expires").into_iter())
+        .min()
+        .unwrap_or(after.len());
     let value = after[..end].trim();
     if value.is_empty() {
         None
@@ -45,9 +54,7 @@ fn number_after<'a>(text: &'a str, marker: &str, allow_dot: bool) -> Option<&'a 
     let value: String = rest
         .chars()
         .skip_while(|c| c.is_whitespace())
-        .take_while(|c| {
-            c.is_ascii_digit() || (allow_dot && *c == '.')
-        })
+        .take_while(|c| c.is_ascii_digit() || (allow_dot && *c == '.'))
         .collect();
     if value.is_empty() {
         None
@@ -63,7 +70,11 @@ fn remaining_days_en(text: &str) -> Option<u32> {
     for line in text.lines() {
         if let Some(pos) = line.find("d /") {
             let before = &line[..pos];
-            let digits: String = before.chars().rev().take_while(|c| c.is_ascii_digit()).collect();
+            let digits: String = before
+                .chars()
+                .rev()
+                .take_while(|c| c.is_ascii_digit())
+                .collect();
             if !digits.is_empty() {
                 if let Ok(days) = digits.chars().rev().collect::<String>().parse::<u32>() {
                     return Some(days);
@@ -122,8 +133,8 @@ pub(crate) fn parse_login_fields(text: &str, now: DateTime<Local>) -> ParsedFiel
 
 #[cfg(test)]
 mod tests {
-    use chrono::TimeZone;
     use super::*;
+    use chrono::TimeZone;
 
     fn now() -> DateTime<Local> {
         chrono::Local
@@ -168,6 +179,29 @@ mod tests {
 
     #[test]
     fn out_of_range_usage_rejected() {
-        assert!(parse_login_fields("用量约 150%", now()).usage_percent.is_none());
+        assert!(parse_login_fields("用量约 150%", now())
+            .usage_percent
+            .is_none());
+    }
+
+    #[test]
+    fn parse_real_login_output_with_space_separators() {
+        let text = "  AtomCode CodingPlan 配置：\n\n  ✓ already logged in as JW(hzjwang)\n  ✓ CodingPlan Lite-体验版 生效\n  ✓ 已添加 1 个账号 · 2 个模型：\n      • AtomGit  ·  qwen3.8-27b  （默认）\n      • AtomGit  ·  glm5.3-flash\n  ✓ 视觉预处理器 → AtomGit · qwen3.8-27b  （自动检测）\n  ✓ CodingPlan 状态：\n      套餐：CodingPlan Lite-体验版    到期时间 2026-11-25（剩余 5d / 共 7d）\n      用量：当前时间窗口用量约 23%    重置于 14:17（9m 40s 后）\n\n  Starting AtomCode...\n";
+        let f = parse_login_fields(text, now());
+        assert_eq!(
+            f.plan_name.as_deref(),
+            Some("CodingPlan Lite-体验版"),
+            "plan={:?}",
+            f.plan_name
+        );
+        assert_eq!(f.remaining_days, Some(5), "days={:?}", f.remaining_days);
+        assert_eq!(f.usage_percent, Some(23.0), "usage={:?}", f.usage_percent);
+        assert_eq!(
+            f.reset_time.as_deref(),
+            Some("2026-11-18 14:17"),
+            "reset={:?}",
+            f.reset_time
+        );
+        assert!(!f.is_empty());
     }
 }

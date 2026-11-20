@@ -65,7 +65,7 @@ pub const ALL_KEYS: &[&str] = &[
     "status_auth_not_found", "status_account_deleted", "status_no_active_account",
     "status_active_account_not_found", "status_updated_from_paste", "status_updated_manual",
     "status_fetching", "status_fetched", "status_fetch_failed", "status_paste_empty",
-    "status_no_active_import", "status_updated", "status_update_failed", "status_parse_no_fields",
+    "status_no_active_import", "status_updated", "status_parse_no_fields",
     "status_auth_cleared", "status_clear_failed", "status_auto_fetch_cancelled",
     "status_imported_count", "status_kept_current", "status_exported", "status_kept_original",
     "status_settings_saved", "status_imported_hint", "account_plan_unknown", "fetch_no_output",

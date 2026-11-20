@@ -95,12 +95,12 @@ impl AtomcodeSwitchApp {
         app
     }
 
-    /// 记录「更新账号信息」的结果消息：显示在窗口内消息区，失败同时写入主窗口状态栏
+    /// 记录「更新账号信息」的结果消息：仅显示在窗口内消息区（气泡），
+    /// 不写入主窗口顶栏/状态栏。
     ///
     /// 无论成功与否都记录；是否关闭窗口由调用方根据成功与否决定。
     pub fn set_update_message(&mut self, kind: UpdateMessageKind, text: String) {
         if kind == UpdateMessageKind::Error {
-            self.status_message = self.i18n.t1("status_update_failed", &text);
             // 任何错误都必须保留窗口供重试：取消可能残留的延迟关窗定时器，
             // 否则下一帧 poll_update_window_close 会关窗并清掉这条错误消息。
             self.close_update_after = None;
