@@ -5,6 +5,7 @@ use crate::i18n::I18n;
 use crate::i18n::lang::Language;
 use crate::io::config_io;
 use crate::models::AppConfig;
+use std::sync::Arc;
 
 /// 设置对话框的临时状态
 pub struct SettingsState {
@@ -58,10 +59,12 @@ pub struct AtomcodeSwitchApp {
     pub update_message: Option<UpdateMessage>,
     /// 解析成功后延迟关闭窗口的时刻，让绿色成功消息有机会渲染
     pub close_update_after: Option<std::time::Instant>,
+    /// 窗口图标，主窗口与「更新账号信息」子视口共用，保持一致
+    pub icon: Option<Arc<eframe::egui::IconData>>,
 }
 
 impl AtomcodeSwitchApp {
-    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+    pub fn new(cc: &eframe::CreationContext<'_>, icon: Option<Arc<eframe::egui::IconData>>) -> Self {
         crate::app::theme::setup_github_theme(&cc.egui_ctx);
         crate::app::theme::setup_fonts(&cc.egui_ctx);
 
@@ -85,6 +88,7 @@ impl AtomcodeSwitchApp {
             auto_parse_pending: false,
             update_message: None,
             close_update_after: None,
+            icon,
         };
 
         app.status_message = match config_load_error {

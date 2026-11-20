@@ -184,7 +184,11 @@ impl AtomcodeSwitchApp {
 
     // ---- /login 输出解析 ----
 
-    /// 从 /login 输出文本中解析信息并更新当前激活账号
+    /// 从 /login 输出文本中解析信息并更新账号。
+    ///
+    /// 目标账号选择：优先按输出中的用户名匹配已存账号；若能识别出用户名
+    /// 却匹配不到任何账号，返回错误以防把套餐/用量写到别的账号（串号）。
+    /// 完全识别不到用户名标记时，维持写当前激活账号的历史行为。
     pub fn parse_login_output_and_update(&mut self, text: &str) -> Result<(), String> {
         let active_id = self
             .config
@@ -199,70 +203,53 @@ impl AtomcodeSwitchApp {
             .position(|a| a.id == active_id)
             .ok_or_else(|| self.i18n.t0("status_active_account_not_found"))?;
 
-        // 提取用户名并尝试匹配
-        if let Some(pos) = text.find("logged in as ") {
-            let rest = &text[pos + "logged in as ".len()..];
-            let paren_end = rest.find(|c: char| c.is_ascii_whitespace() || c == '。' || c == '\n');
-            let username_section = if let Some(e) = paren_end {
-                &rest[..e]
-            } else {
-                rest.trim_end()
-            };
-
-            let login_name = if let Some(paren) = username_section.find('(') {
-                username_section[..paren].trim()
-            } else {
-                username_section.trim()
-            };
-
-            let current_name = &self.config.accounts[active_idx].auth_data.user.name;
-            if current_name != login_name {
-                if let Some(matched_idx) = self.config.accounts.iter().position(|a| {
-                    a.auth_data.user.name == login_name || a.auth_data.user.username == login_name
-                }) {
-                    // 先解析：一个字段都没识别出来时不写入任何数据，避免「假成功」
-                    let parsed = {
-                        let acc = &mut self.config.accounts[matched_idx];
-                        Self::apply_parsed_fields(acc, text)
-                    };
-                    if !parsed {
-                        return Err(self.i18n.t0("status_parse_no_fields"));
-                    }
-
-                    let matched_id = self.config.accounts[matched_idx].id.clone();
-                    // 登录用户与当前激活账号不一致：把匹配账号的 auth 写入磁盘，
-                    // 否则调用方随后的 import_current_auth() 会读回旧账号并撤销本次切换。
-                    let matched_auth = self.config.accounts[matched_idx].auth_data.clone();
-                    if let Err(e) =
-                        atomcode_io::write_auth(&self.config.custom_atomcode_dir, &matched_auth)
-                    {
-                        return Err(e);
-                    }
-                    self.config.active_account_id = Some(matched_id);
-                    {
-                        let new_acc = &mut self.config.accounts[matched_idx];
-                        new_acc.last_updated = Self::current_time_str();
-                        new_acc.is_valid = true;
-                    }
-                    if !self.persist_config() {
-                        return Err(self.status_message.clone());
-                    }
-                    self.status_message = self.i18n.t1("status_updated_from_paste", login_name);
-                    return Ok(());
+        let login_name = Self::extract_login_name(text);
+        let target_idx = match &login_name {
+            Some(name) => {
+                let current = &self.config.accounts[active_idx].auth_data.user;
+                if current.name.as_str() == name.as_str()
+                    || current.username.as_str() == name.as_str()
+                {
+                    // 登录名就是当前激活账号（name 或 username 命中），就地更新
+                    active_idx
+                } else {
+                    self.config
+                        .accounts
+                        .iter()
+                        .position(|a| {
+                            a.auth_data.user.name.as_str() == name.as_str()
+                                || a.auth_data.user.username.as_str() == name.as_str()
+                        })
+                        .ok_or_else(|| self.i18n.t1("status_login_user_unmatched", name))?
                 }
             }
-        }
+            None => active_idx,
+        };
 
+        // 先解析：一个字段都没识别出来时不写入任何数据，避免「假成功」
         let parsed = {
-            let acc = &mut self.config.accounts[active_idx];
+            let acc = &mut self.config.accounts[target_idx];
             Self::apply_parsed_fields(acc, text)
         };
         if !parsed {
             return Err(self.i18n.t0("status_parse_no_fields"));
         }
 
+        if target_idx != active_idx {
+            // 登录用户与当前激活账号不一致：把匹配账号的 auth 写入磁盘，
+            // 否则调用方随后的 import_current_auth() 会读回旧账号并撤销本次切换。
+            let matched_id = self.config.accounts[target_idx].id.clone();
+            let matched_auth = self.config.accounts[target_idx].auth_data.clone();
+            if let Err(e) =
+                atomcode_io::write_auth(&self.config.custom_atomcode_dir, &matched_auth)
+            {
+                return Err(e);
+            }
+            self.config.active_account_id = Some(matched_id);
+        }
+
         {
-            let acc = &mut self.config.accounts[active_idx];
+            let acc = &mut self.config.accounts[target_idx];
             acc.last_updated = Self::current_time_str();
             acc.is_valid = true;
         }
@@ -270,8 +257,43 @@ impl AtomcodeSwitchApp {
         if !self.persist_config() {
             return Err(self.status_message.clone());
         }
-        self.status_message = self.i18n.t0("status_updated_manual");
+
+        self.status_message = if target_idx == active_idx {
+            self.i18n.t0("status_updated_manual")
+        } else {
+            self.i18n.t1(
+                "status_updated_from_paste",
+                login_name.as_deref().unwrap_or(""),
+            )
+        };
         Ok(())
+    }
+
+    /// 从 /login 输出中提取登录用户名，兼容中英文标记；无标记时返回 None。
+    fn extract_login_name(text: &str) -> Option<String> {
+        const MARKERS: &[&str] = &["logged in as ", "已登录为", "登录为", "当前用户"];
+        for marker in MARKERS {
+            let pos = match text.find(marker) {
+                Some(p) => p,
+                None => continue,
+            };
+            let rest = text[pos + marker.len()..]
+                .trim_start()
+                .trim_start_matches(|c| c == ':' || c == '：')
+                .trim_start();
+            let line = rest.split('\n').next().unwrap_or(rest);
+            let end = line
+                .find(|c: char| {
+                    c.is_whitespace()
+                        || matches!(c, '。' | '（' | '(' | '，' | ',' | ':' | '：')
+                })
+                .unwrap_or(line.len());
+            let name = line[..end].trim();
+            if !name.is_empty() {
+                return Some(name.to_string());
+            }
+        }
+        None
     }
 
     /// 将解析出的字段事务性地应用到 ManagedAccount。

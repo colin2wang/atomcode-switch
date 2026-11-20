@@ -22,7 +22,6 @@ pub const GITHUB_PROGRESS_BG: egui::Color32 = egui::Color32::from_rgb(233, 236, 
 
 // 卡片专用语义色（Bootstrap 风格，收敛硬编码）
 pub const CARD_NAME_TEXT: egui::Color32 = egui::Color32::from_rgb(33, 37, 41);
-pub const CARD_VALID: egui::Color32 = egui::Color32::from_rgb(40, 167, 69);
 pub const CARD_SECONDARY_TEXT: egui::Color32 = egui::Color32::from_rgb(108, 117, 125);
 pub const CARD_SWITCH_BLUE: egui::Color32 = egui::Color32::from_rgb(13, 110, 253);
 pub const CARD_ACTIVATED_BG: egui::Color32 = egui::Color32::from_rgb(220, 255, 220);
@@ -32,11 +31,16 @@ pub const MSG_INFO_BG: egui::Color32 = egui::Color32::from_rgb(233, 244, 255);
 pub const MSG_SUCCESS_BG: egui::Color32 = egui::Color32::from_rgb(233, 250, 233);
 pub const MSG_ERROR_BG: egui::Color32 = egui::Color32::from_rgb(255, 238, 238);
 
-// 状态方块配色：暖色（即将过期/已过期但需用户关注）与柔和浅红（已失效，功能不可用）
-pub const STATUS_WARN_BG: egui::Color32 = egui::Color32::from_rgb(0xFF, 0xF3, 0xE0);
-pub const STATUS_WARN_FG: egui::Color32 = egui::Color32::from_rgb(0xE6, 0x51, 0x00);
+// 状态方块配色：按 code plan 时间窗口有效性四级分色，统一到 GitHub palette。
+// 有效=绿（窗口充足）→ 即将过期=琥珀(severe) → 已过期=橙 → 已失效=红(danger)。
+pub const STATUS_OK_BG: egui::Color32 = egui::Color32::from_rgb(0xDA, 0xFB, 0xE1);
+pub const STATUS_OK_FG: egui::Color32 = egui::Color32::from_rgb(0x1A, 0x7F, 0x37);
+pub const STATUS_EXPIRING_BG: egui::Color32 = egui::Color32::from_rgb(0xFF, 0xF8, 0xC5);
+pub const STATUS_EXPIRING_FG: egui::Color32 = egui::Color32::from_rgb(0x9A, 0x67, 0x00);
+pub const STATUS_EXPIRED_BG: egui::Color32 = egui::Color32::from_rgb(0xFF, 0xF3, 0xE0);
+pub const STATUS_EXPIRED_FG: egui::Color32 = egui::Color32::from_rgb(0xBC, 0x4C, 0x00);
 pub const STATUS_INVALID_BG: egui::Color32 = egui::Color32::from_rgb(0xFF, 0xEB, 0xEE);
-pub const STATUS_INVALID_FG: egui::Color32 = egui::Color32::from_rgb(0xF4, 0x43, 0x36);
+pub const STATUS_INVALID_FG: egui::Color32 = egui::Color32::from_rgb(0xCF, 0x22, 0x2E);
 
 /// 获取用量百分比对应的颜色
 pub fn usage_color(percent: f32) -> egui::Color32 {

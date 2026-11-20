@@ -91,8 +91,16 @@ impl AtomcodeSwitchApp {
                         if let Ok(chunk) = out_rx.try_recv() {
                             early_out.push_str(&chunk);
                         }
+                        // 读到关键字段即提前结束等待；关键词覆盖中英文套餐/用量/
+                        // 剩余/到期/重置等标记，避免纯英文或含「剩余」的输出要多等。
+                        // 注意：stdout 由独立读取线程持续读取，早退后仍会给 flush
+                        // 窗口收齐剩余输出，因此不会因早退丢字段。
                         if early_out.contains("套餐")
                             || early_out.contains("Plan:")
+                            || early_out.contains("剩余")
+                            || early_out.contains("Usage")
+                            || early_out.contains("usage")
+                            || early_out.contains("到期时间")
                             || early_out.contains("resets")
                             || early_out.contains("重置于")
                         {
@@ -119,7 +127,9 @@ impl AtomcodeSwitchApp {
                     }
                     let _ = child.wait();
 
-                    let flush = if exited { FLUSH_WINDOW } else { Duration::ZERO };
+                    // 始终给读取线程一个 flush 窗口：即使因关键词早退或被超时 kill，
+                    // stdout/stderr 读取线程仍可能正在把剩余输出写入通道，flush=0 会截断输出。
+                    let flush = FLUSH_WINDOW;
                     let err_buf = err_rx.recv_timeout(flush).unwrap_or_default();
                     let out_buf = out_rx.recv_timeout(flush).unwrap_or_default();
                     early_out.push_str(&out_buf);

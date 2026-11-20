@@ -1,5 +1,22 @@
 # Change History
 
+## v0.1.9 (2026-11-20)
+
+### Fixed
+- **Export is now atomic and reports failures** — `handle_export` uses `io::atomic_write_text` (`.tmp` → `.bak` → rename) instead of `std::fs::write`; serialization and write errors surface via the new `status_export_failed` message instead of silently reporting success.
+- **Corrupt accounts YAML no longer clears accounts** — `load_accounts_from` returns `Result` and all three call sites (settings browse, settings confirm, export conflict check) surface a localized error; switching to a data directory with a corrupt/valid-but-empty accounts file aborts the import and keeps the current accounts.
+- **`/login` username matching prevents cross-account writes** — when a login username is recognized but matches no stored account, parsing returns an error instead of silently applying plan/usage to the active account. Added Chinese username markers (`已登录为` / `登录为` / `当前用户`) alongside `logged in as `.
+- **Auto-fetch captures complete output** — added `剩余` / `Usage` / `到期时间` early-exit keywords for Chinese/English output, and the stdout/stderr flush window is no longer zero on early exit or kill, preventing truncated output.
+- **Sort label matches behavior** — `sort_none` is now "按名称 / By name" (the `None` mode actually sorts by name).
+
+### Changed
+- **Four-level account badge colors** — `Normal` / `Expiring` / `Expired` / `Invalid` now render as badges with distinct backgrounds and foregrounds, unified to the GitHub palette (`STATUS_OK_*`, `STATUS_EXPIRING_*`, `STATUS_EXPIRED_*`, `STATUS_INVALID_*`). Card borders, progress bars and countdown text use the same semantic colors; removed the redundant `●` prefix from badge labels. Thresholds (`EXPIRING_SOON_SECS`) and the single expiring color are now shared constants.
+- **Sub-window icon** — the "Update Account Info" viewport reuses the main window icon via a shared `Arc<IconData>` on the app state.
+- **i18n cleanup** — removed the dead `status_fetched` key; added `status_export_failed`, `status_accounts_file_invalid`, `status_login_user_unmatched`, `dialog_import_failed_title` to both locales and `ALL_KEYS`.
+
+### Added
+- **Badge color unit test** — verifies the four states have distinct background and foreground colors.
+
 ## 2026-11-01
 
 - Update release doc. — release v0.1.8 release-notes updates (`releases/v0.1.8.md`)

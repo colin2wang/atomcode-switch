@@ -2,11 +2,14 @@
 
 use crate::app::theme;
 use crate::app::{AtomcodeSwitchApp, SettingsState};
-use crate::io::{atomcode_io, config_io};
+use crate::io::{atomic_write_text, atomcode_io, config_io};
 use crate::models::AppConfig;
 use crate::ops::time_utils::parse_reset_datetime;
 use eframe::egui;
 use theme::*;
+
+/// 「即将过期」阈值：重置时间在 1 小时内（expiry 判断与倒计时共用）
+const EXPIRING_SOON_SECS: u64 = 3600;
 
 /// 卡片渲染期间收集的延迟动作：渲染阶段只借用账号引用，循环结束后统一执行
 enum CardAction {
@@ -26,12 +29,34 @@ enum AccountVisualState {
 }
 
 impl AccountVisualState {
+    /// 状态方块（徽标）配色：返回 (前景/描边色, 底色)。
+    /// 按 code plan 时间窗口有效性分级，见 theme.rs 的 STATUS_* 常量。
+    fn badge_colors(self) -> (egui::Color32, egui::Color32) {
+        match self {
+            Self::Normal => (STATUS_OK_FG, STATUS_OK_BG),
+            Self::Expiring => (STATUS_EXPIRING_FG, STATUS_EXPIRING_BG),
+            Self::Expired => (STATUS_EXPIRED_FG, STATUS_EXPIRED_BG),
+            Self::Invalid => (STATUS_INVALID_FG, STATUS_INVALID_BG),
+        }
+    }
+
+    /// 各状态对应的 i18n key
+    fn badge_key(self) -> &'static str {
+        match self {
+            Self::Normal => "card_valid",
+            Self::Expiring => "card_expiring",
+            Self::Expired => "card_expired",
+            Self::Invalid => "card_invalid",
+        }
+    }
+
     /// 卡片底色与边框色：正常卡片沿用白底 + 激活红边/非激活灰边；
     /// 异常/过期卡片用极淡灰白底 + 语义色边框，在层级上弱化并提示处理。
     fn card_colors(self, is_active: bool) -> (egui::Color32, egui::Color32) {
         match self {
             Self::Invalid => (CARD_EXPIRED_BG, STATUS_INVALID_FG),
-            Self::Expired | Self::Expiring => (CARD_EXPIRED_BG, STATUS_WARN_FG),
+            Self::Expired => (CARD_EXPIRED_BG, STATUS_EXPIRED_FG),
+            Self::Expiring => (CARD_EXPIRED_BG, STATUS_EXPIRING_FG),
             Self::Normal => (
                 egui::Color32::WHITE,
                 if is_active { GITHUB_RED } else { GITHUB_BORDER },
@@ -43,7 +68,8 @@ impl AccountVisualState {
     fn progress_color(self, usage_percent: f32) -> egui::Color32 {
         match self {
             Self::Invalid => STATUS_INVALID_FG,
-            Self::Expired | Self::Expiring => STATUS_WARN_FG,
+            Self::Expired => STATUS_EXPIRED_FG,
+            Self::Expiring => STATUS_EXPIRING_FG,
             Self::Normal => theme::progress_bar_color(usage_percent),
         }
     }
@@ -370,13 +396,17 @@ impl AtomcodeSwitchApp {
     /// 共享主窗口的 egui Context（字体/主题自动继承）。
     fn show_manual_update_viewport(&mut self, ctx: &egui::Context) {
         let title = self.i18n.t0("update_title");
+        let mut viewport = egui::ViewportBuilder::default()
+            .with_title(title.clone())
+            .with_inner_size([520.0, 380.0])
+            .with_min_inner_size([420.0, 300.0]);
+        if let Some(icon) = &self.icon {
+            viewport = viewport.with_icon(icon.clone());
+        }
 
         ctx.show_viewport_immediate(
             egui::ViewportId(egui::Id::new("manual_update_window")),
-            egui::ViewportBuilder::default()
-                .with_title(title.clone())
-                .with_inner_size([520.0, 380.0])
-                .with_min_inner_size([420.0, 300.0]),
+            viewport,
             |ctx, class| {
                 debug_assert!(class == egui::ViewportClass::Immediate);
 
@@ -729,36 +759,14 @@ impl AtomcodeSwitchApp {
                                     .strong(),
                             );
                             ui.add_space(4.0);
-                            match visual_state {
-                                // 已失效（功能不可用）：柔和浅红底 + 错误红字
-                                AccountVisualState::Invalid => status_badge(
-                                    ui,
-                                    self.i18n.t0("card_invalid"),
-                                    STATUS_INVALID_FG,
-                                    STATUS_INVALID_BG,
-                                ),
-                                // 已过期但需用户关注：暖色底 + 深橙字
-                                AccountVisualState::Expired => status_badge(
-                                    ui,
-                                    self.i18n.t0("card_expired"),
-                                    STATUS_WARN_FG,
-                                    STATUS_WARN_BG,
-                                ),
-                                // 即将过期（1 小时内重置）：暖色提醒
-                                AccountVisualState::Expiring => status_badge(
-                                    ui,
-                                    self.i18n.t0("card_expiring"),
-                                    STATUS_WARN_FG,
-                                    STATUS_WARN_BG,
-                                ),
-                                AccountVisualState::Normal => {
-                                    ui.label(
-                                        egui::RichText::new(self.i18n.t0("card_valid"))
-                                            .size(11.0)
-                                            .color(CARD_VALID),
-                                    );
-                                }
-                            }
+                            // 四种状态统一徽标化，配色由 badge_colors 决定
+                            let (badge_fg, badge_bg) = visual_state.badge_colors();
+                            status_badge(
+                                ui,
+                                self.i18n.t0(visual_state.badge_key()),
+                                badge_fg,
+                                badge_bg,
+                            );
                         });
                         ui.label(
                             egui::RichText::new(&acc.auth_data.user.id)
@@ -1019,30 +1027,45 @@ impl AtomcodeSwitchApp {
                                     std::path::Path::new(&dir).join("atomcode-accounts.yaml");
                                 let mut confirmed_import = true;
                                 if accounts_path.exists() {
-                                    let existing = Self::load_accounts_from(&accounts_path);
-                                    let existing_accounts = existing
-                                        .as_ref()
-                                        .map(|c| c.accounts.as_slice())
-                                        .unwrap_or(&[]);
-                                    let msg = self.i18n.t4(
-                                        "dialog_switch_dir_msg",
-                                        &existing_accounts.len().to_string(),
-                                        &Self::format_account_lines(&self.i18n, existing_accounts),
-                                        &self.config.accounts.len().to_string(),
-                                        &Self::format_account_lines(
-                                            &self.i18n,
-                                            &self.config.accounts,
-                                        ),
-                                    );
-                                    confirmed_import = matches!(
-                                        tinyfiledialogs::message_box_yes_no(
-                                            &self.i18n.t0("dialog_switch_dir_title"),
-                                            &msg,
-                                            tinyfiledialogs::MessageBoxIcon::Question,
-                                            tinyfiledialogs::YesNo::No,
-                                        ),
-                                        tinyfiledialogs::YesNo::Yes
-                                    );
+                                    match Self::load_accounts_from(&accounts_path) {
+                                        Ok(existing) => {
+                                            let existing_accounts = existing.accounts.as_slice();
+                                            let msg = self.i18n.t4(
+                                                "dialog_switch_dir_msg",
+                                                &existing_accounts.len().to_string(),
+                                                &Self::format_account_lines(
+                                                    &self.i18n,
+                                                    existing_accounts,
+                                                ),
+                                                &self.config.accounts.len().to_string(),
+                                                &Self::format_account_lines(
+                                                    &self.i18n,
+                                                    &self.config.accounts,
+                                                ),
+                                            );
+                                            confirmed_import = matches!(
+                                                tinyfiledialogs::message_box_yes_no(
+                                                    &self.i18n.t0("dialog_switch_dir_title"),
+                                                    &msg,
+                                                    tinyfiledialogs::MessageBoxIcon::Question,
+                                                    tinyfiledialogs::YesNo::No,
+                                                ),
+                                                tinyfiledialogs::YesNo::Yes
+                                            );
+                                        }
+                                        Err(e) => {
+                                            let msg =
+                                                self.i18n.t1("status_accounts_file_invalid", &e);
+                                            self.status_message = msg.clone();
+                                            tinyfiledialogs::message_box_ok(
+                                                &self.i18n.t0("dialog_import_failed_title"),
+                                                &msg,
+                                                tinyfiledialogs::MessageBoxIcon::Error,
+                                            );
+                                            // 文件损坏：中止导入，不设置 pending_import_data_dir
+                                            confirmed_import = false;
+                                        }
+                                    }
                                 }
                                 if confirmed_import {
                                     let accounts_path =
@@ -1136,13 +1159,27 @@ impl AtomcodeSwitchApp {
 
         if save {
             if let Some(state) = self.settings_state.take() {
+                let mut import_failed = false;
                 // 「确定」时才真正导入目标目录中的账号
                 if let Some(dir) = state.pending_import_data_dir {
                     let accounts_path = std::path::Path::new(&dir).join("atomcode-accounts.yaml");
-                    if let Some(config) = Self::load_accounts_from(&accounts_path) {
-                        self.config.accounts = config.accounts;
-                        self.config.active_account_id = config.active_account_id;
-                        self.config.auto_switch_rules = config.auto_switch_rules;
+                    match Self::load_accounts_from(&accounts_path) {
+                        Ok(config) => {
+                            self.config.accounts = config.accounts;
+                            self.config.active_account_id = config.active_account_id;
+                            self.config.auto_switch_rules = config.auto_switch_rules;
+                        }
+                        Err(e) => {
+                            let msg = self.i18n.t1("status_accounts_file_invalid", &e);
+                            tinyfiledialogs::message_box_ok(
+                                &self.i18n.t0("dialog_import_failed_title"),
+                                &msg,
+                                tinyfiledialogs::MessageBoxIcon::Error,
+                            );
+                            self.status_message = msg;
+                            // 文件损坏：保留当前账号，不清空
+                            import_failed = true;
+                        }
                     }
                 }
                 config_io::set_custom_data_dir(if state.data_dir.is_empty() {
@@ -1158,7 +1195,7 @@ impl AtomcodeSwitchApp {
                 self.config.auto_switch_rules.enabled = state.auto_switch_enabled;
                 self.config.auto_switch_rules.max_usage_percent = state.max_usage_percent;
                 self.config.auto_update_on_switch_expired = state.auto_update_on_switch_expired;
-                if self.persist_config() {
+                if self.persist_config() && !import_failed {
                     self.status_message = self.i18n.t0("status_settings_saved");
                 }
             }
@@ -1197,11 +1234,10 @@ impl AtomcodeSwitchApp {
             .join("\n")
     }
 
-    /// 读取指定 YAML 文件中的账号配置
-    fn load_accounts_from(path: &std::path::Path) -> Option<AppConfig> {
-        std::fs::read_to_string(path)
-            .ok()
-            .and_then(|c| serde_yaml::from_str::<AppConfig>(&c).ok())
+    /// 读取指定 YAML 文件中的账号配置；读取或解析失败时返回错误，由调用方决定如何处理。
+    fn load_accounts_from(path: &std::path::Path) -> Result<AppConfig, String> {
+        let content = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
+        serde_yaml::from_str::<AppConfig>(&content).map_err(|e| e.to_string())
     }
 
     /// 处理导出按钮逻辑
@@ -1214,7 +1250,14 @@ impl AtomcodeSwitchApp {
         ) {
             let path = std::path::Path::new(&path_str);
             let should_overwrite = if path.exists() {
-                let existing = Self::load_accounts_from(path);
+                let existing = match Self::load_accounts_from(path) {
+                    Ok(config) => Some(config),
+                    Err(e) => {
+                        // 目标文件损坏：提示但继续走覆盖确认（原子写会先备份原文件）
+                        self.status_message = self.i18n.t1("status_accounts_file_invalid", &e);
+                        None
+                    }
+                };
                 let existing_accounts = existing
                     .as_ref()
                     .map(|c| c.accounts.as_slice())
@@ -1241,9 +1284,12 @@ impl AtomcodeSwitchApp {
             };
 
             if should_overwrite {
-                if let Ok(content) = serde_yaml::to_string(&self.config) {
-                    let _ = std::fs::write(path, content);
-                    self.status_message = self.i18n.t0("status_exported");
+                let result = serde_yaml::to_string(&self.config)
+                    .map_err(|e| e.to_string())
+                    .and_then(|content| atomic_write_text(path, &content));
+                match result {
+                    Ok(()) => self.status_message = self.i18n.t0("status_exported"),
+                    Err(e) => self.status_message = self.i18n.t1("status_export_failed", &e),
                 }
             } else {
                 self.status_message = self.i18n.t0("status_kept_original");
@@ -1255,7 +1301,9 @@ impl AtomcodeSwitchApp {
     fn is_expiring_soon(&self, acc: &crate::models::ManagedAccount) -> bool {
         let now = chrono::Local::now();
         parse_reset_datetime(&acc.reset_time, now)
-            .map(|target| target >= now && (target - now).num_seconds() < 3600)
+            .map(|target| {
+                target >= now && (target - now).num_seconds() < EXPIRING_SOON_SECS as i64
+            })
             .unwrap_or(false)
     }
 
@@ -1274,22 +1322,22 @@ impl AtomcodeSwitchApp {
         };
         let diff_secs = (target - now).num_seconds();
         if diff_secs < 0 {
-            // 已过期但需用户关注：暖橙提醒
+            // 已过期但需用户关注：橙红提醒
             return (
                 self.i18n.t1("card_reset_expired", reset_time.trim()),
-                STATUS_WARN_FG,
+                STATUS_EXPIRED_FG,
             );
         }
         let diff = diff_secs as u64;
         let minutes = diff / 60;
         let seconds = diff % 60;
-        // 即将过期（1 小时内）也用暖色提醒
-        let color = if diff < 3600 {
-            STATUS_WARN_FG
+        // 即将过期（1 小时内）用琥珀提醒
+        let color = if diff < EXPIRING_SOON_SECS {
+            STATUS_EXPIRING_FG
         } else {
             GITHUB_TEXT_SECONDARY
         };
-        let text = if diff >= 3600 {
+        let text = if diff >= EXPIRING_SOON_SECS {
             self.i18n.t4(
                 "card_reset_countdown_h",
                 reset_time.trim(),
@@ -1353,5 +1401,38 @@ impl AtomcodeSwitchApp {
                 SortMode::None => std::cmp::Ordering::Equal,
             }
         });
+    }
+}
+
+#[cfg(test)]
+mod badge_tests {
+    use super::*;
+
+    #[test]
+    fn badge_colors_distinct_per_state() {
+        let states = [
+            AccountVisualState::Normal,
+            AccountVisualState::Expiring,
+            AccountVisualState::Expired,
+            AccountVisualState::Invalid,
+        ];
+        for i in 0..states.len() {
+            for j in i + 1..states.len() {
+                assert_ne!(
+                    states[i].badge_colors().1,
+                    states[j].badge_colors().1,
+                    "状态 {} 与 {} 底色相同",
+                    states[i].badge_key(),
+                    states[j].badge_key()
+                );
+                assert_ne!(
+                    states[i].badge_colors().0,
+                    states[j].badge_colors().0,
+                    "状态 {} 与 {} 字色相同",
+                    states[i].badge_key(),
+                    states[j].badge_key()
+                );
+            }
+        }
     }
 }

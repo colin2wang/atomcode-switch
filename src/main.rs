@@ -27,8 +27,8 @@ fn main() -> eframe::Result<()> {
     let mut viewport = egui::ViewportBuilder::default()
         .with_inner_size([780.0, 560.0])
         .with_min_inner_size([600.0, 400.0]);
-    if let Some(icon) = icon {
-        viewport = viewport.with_icon(icon);
+    if let Some(icon) = &icon {
+        viewport = viewport.with_icon(icon.clone());
     }
 
     let options = eframe::NativeOptions {
@@ -39,7 +39,7 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         &format!("AtomCode Switch v{}", env!("CARGO_PKG_VERSION")),
         options,
-        Box::new(|cc| Box::new(AtomcodeSwitchApp::new(cc))),
+        Box::new(move |cc| Box::new(AtomcodeSwitchApp::new(cc, icon.clone()))),
     )?;
     Ok(())
 }
