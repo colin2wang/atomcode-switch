@@ -53,7 +53,9 @@ pub fn get(key: &str) -> &str {
         "settings_enable_auto_switch" => "启用自动切换",
         "settings_usage_exceeds" => "用量超过",
         "settings_auto_switch_to" => "时自动切换至用量最低的账号",
-        "settings_auto_update_on_switch_expired" => "切换账号时若信息已过期，自动打开更新窗口并更新",
+        "settings_auto_update_on_switch_expired" => {
+            "切换账号时若信息已过期，自动打开更新窗口并更新"
+        }
         "btn_confirm" => "确定",
         "btn_cancel" => "取消",
 
@@ -81,8 +83,12 @@ pub fn get(key: &str) -> &str {
         "dialog_export_title" => "导出配置",
         "dialog_switch_dir_title" => "切换导出目录",
         "dialog_overwrite_title" => "导出冲突",
-        "dialog_switch_dir_msg" => "目标目录已有 {0} 个账号：\n{1}\n\n当前程序有 {2} 个账号：\n{3}\n\n是否用目标目录的账号替换当前账号？",
-        "dialog_overwrite_msg" => "目标文件已有 {0} 个账号：\n{1}\n\n即将导出 {2} 个账号：\n{3}\n\n是否覆盖？",
+        "dialog_switch_dir_msg" => {
+            "目标目录已有 {0} 个账号：\n{1}\n\n当前程序有 {2} 个账号：\n{3}\n\n是否用目标目录的账号替换当前账号？"
+        }
+        "dialog_overwrite_msg" => {
+            "目标文件已有 {0} 个账号：\n{1}\n\n即将导出 {2} 个账号：\n{3}\n\n是否覆盖？"
+        }
         "dialog_none" => "（无）",
         "dialog_account_line" => "  - {0}（{1}）",
 
@@ -106,7 +112,9 @@ pub fn get(key: &str) -> &str {
         "status_paste_empty" => "粘贴内容为空",
         "status_no_active_import" => "没有激活的账号，请先导入账号",
         "status_updated" => "账号信息已更新",
-        "status_parse_no_fields" => "未能识别出任何账号信息（套餐 / 用量 / 剩余天数 / 重置时间），请确认内容是 atomcode /login 的完整输出",
+        "status_parse_no_fields" => {
+            "未能识别出任何账号信息（套餐 / 用量 / 剩余天数 / 重置时间），请确认内容是 atomcode /login 的完整输出"
+        }
         "status_auth_cleared" => "已清空当前登录",
         "status_clear_failed" => "清空失败: {0}",
         "status_auto_fetch_cancelled" => "已取消自动获取",

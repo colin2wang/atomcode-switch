@@ -26,6 +26,8 @@ pub const CARD_VALID: egui::Color32 = egui::Color32::from_rgb(40, 167, 69);
 pub const CARD_SECONDARY_TEXT: egui::Color32 = egui::Color32::from_rgb(108, 117, 125);
 pub const CARD_SWITCH_BLUE: egui::Color32 = egui::Color32::from_rgb(13, 110, 253);
 pub const CARD_ACTIVATED_BG: egui::Color32 = egui::Color32::from_rgb(220, 255, 220);
+/// 过期/失效卡片的弱化底色（极淡灰白），边框用语义色强调，不影响正常卡片
+pub const CARD_EXPIRED_BG: egui::Color32 = egui::Color32::from_rgb(0xFA, 0xFA, 0xFA);
 pub const MSG_INFO_BG: egui::Color32 = egui::Color32::from_rgb(233, 244, 255);
 pub const MSG_SUCCESS_BG: egui::Color32 = egui::Color32::from_rgb(233, 250, 233);
 pub const MSG_ERROR_BG: egui::Color32 = egui::Color32::from_rgb(255, 238, 238);
@@ -121,9 +123,10 @@ pub fn setup_fonts(ctx: &egui::Context) {
     let mut fonts = egui::FontDefinitions::default();
 
     if let Some(font_data) = load_chinese_font() {
-        fonts
-            .font_data
-            .insert("chinese_font".to_owned(), egui::FontData::from_owned(font_data));
+        fonts.font_data.insert(
+            "chinese_font".to_owned(),
+            egui::FontData::from_owned(font_data),
+        );
 
         fonts
             .families

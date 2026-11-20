@@ -50,7 +50,8 @@ pub(crate) fn parse_reset_datetime(
     let naive = now.date_naive().and_hms_opt(hour, minute, 0)?;
     let target = to_local(naive)?;
     if target < now {
-        let tomorrow = (now.date_naive() + chrono::Duration::days(1)).and_hms_opt(hour, minute, 0)?;
+        let tomorrow =
+            (now.date_naive() + chrono::Duration::days(1)).and_hms_opt(hour, minute, 0)?;
         to_local(tomorrow)
     } else {
         Some(target)
@@ -79,8 +80,8 @@ pub(crate) fn combine_reset_datetime(hm: &str, now: DateTime<Local>) -> Option<S
 
 #[cfg(test)]
 mod tests {
-    use chrono::TimeZone;
     use super::*;
+    use chrono::TimeZone;
 
     fn fixed_now() -> DateTime<Local> {
         chrono::Local

@@ -1,8 +1,8 @@
 //! 账号操作：同步、切换、导入、删除、自动切换、/login 解析
 
-use crate::models::ManagedAccount;
-use crate::io::atomcode_io;
 use crate::app::AtomcodeSwitchApp;
+use crate::io::atomcode_io;
+use crate::models::ManagedAccount;
 use crate::ops::login_parser::parse_login_fields;
 use crate::ops::time_utils::parse_reset_datetime;
 
@@ -40,7 +40,8 @@ impl AtomcodeSwitchApp {
                     const HYSTERESIS: f32 = 5.0;
                     let mut best_acc: Option<&ManagedAccount> = None;
                     for acc in &self.config.accounts {
-                        if acc.is_valid && acc.id != *active_id
+                        if acc.is_valid
+                            && acc.id != *active_id
                             && acc.info_status == crate::models::AccountInfoStatus::Fresh
                             && acc.usage_percent < threshold
                             && active_usage - acc.usage_percent >= HYSTERESIS
@@ -96,7 +97,10 @@ impl AtomcodeSwitchApp {
                     // `acc` 至此不再使用，借用释放后可调用 &mut self 方法
                     if self.persist_config() {
                         self.status_message = self.i18n.t1("status_switched", &name);
-                        if open_update_on_expired && self.config.auto_update_on_switch_expired && expired {
+                        if open_update_on_expired
+                            && self.config.auto_update_on_switch_expired
+                            && expired
+                        {
                             self.open_auto_update_window();
                         }
                     }
@@ -214,8 +218,7 @@ impl AtomcodeSwitchApp {
             let current_name = &self.config.accounts[active_idx].auth_data.user.name;
             if current_name != login_name {
                 if let Some(matched_idx) = self.config.accounts.iter().position(|a| {
-                    a.auth_data.user.name == login_name
-                        || a.auth_data.user.username == login_name
+                    a.auth_data.user.name == login_name || a.auth_data.user.username == login_name
                 }) {
                     // 先解析：一个字段都没识别出来时不写入任何数据，避免「假成功」
                     let parsed = {

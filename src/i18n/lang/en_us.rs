@@ -53,13 +53,17 @@ pub fn get(key: &str) -> &str {
         "settings_enable_auto_switch" => "Enable auto-switch",
         "settings_usage_exceeds" => "Switch when usage exceeds",
         "settings_auto_switch_to" => "to the lowest-usage account",
-        "settings_auto_update_on_switch_expired" => "Auto-open update window when switching to an expired account",
+        "settings_auto_update_on_switch_expired" => {
+            "Auto-open update window when switching to an expired account"
+        }
         "btn_confirm" => "OK",
         "btn_cancel" => "Cancel",
 
         // ======== Update Dialog ========
         "update_title" => "Update Account Info",
-        "update_desc" => "Login info is fetched automatically on open; click \"Re-fetch\" to fetch again:",
+        "update_desc" => {
+            "Login info is fetched automatically on open; click \"Re-fetch\" to fetch again:"
+        }
         "update_auto_fetch" => "Re-fetch",
         "update_fetching" => "Fetching...",
         "update_cancel" => "Cancel",
@@ -67,7 +71,9 @@ pub fn get(key: &str) -> &str {
         "update_hint" => "Paste /login output here, or click \"Re-fetch\" above...",
         "update_error_title" => "Parse failed — window and original content are kept",
         "update_parse_failed" => "Parse failed: {0}",
-        "update_error_hint" => "Click \"Re-fetch\" to retry, or edit the content above and click \"Parse & Update\" again",
+        "update_error_hint" => {
+            "Click \"Re-fetch\" to retry, or edit the content above and click \"Parse & Update\" again"
+        }
         "update_success_title" => "Parsed successfully",
 
         // ======== Delete Confirmation ========
@@ -81,15 +87,21 @@ pub fn get(key: &str) -> &str {
         "dialog_export_title" => "Export config",
         "dialog_switch_dir_title" => "Switch export directory",
         "dialog_overwrite_title" => "Export conflict",
-        "dialog_switch_dir_msg" => "Target directory has {0} accounts:\n{1}\n\nCurrent app has {2} accounts:\n{3}\n\nReplace current accounts with target directory ones?",
-        "dialog_overwrite_msg" => "Target file has {0} accounts:\n{1}\n\nExporting {2} accounts:\n{3}\n\nOverwrite?",
+        "dialog_switch_dir_msg" => {
+            "Target directory has {0} accounts:\n{1}\n\nCurrent app has {2} accounts:\n{3}\n\nReplace current accounts with target directory ones?"
+        }
+        "dialog_overwrite_msg" => {
+            "Target file has {0} accounts:\n{1}\n\nExporting {2} accounts:\n{3}\n\nOverwrite?"
+        }
         "dialog_none" => "(none)",
         "dialog_account_line" => "  - {0} ({1})",
 
         // ======== Status Messages ========
         "status_ready" => "Ready",
         "status_save_failed" => "Failed to save config: {0}",
-        "status_config_load_failed" => "Config load failed: {0}; original file backed up, defaults loaded",
+        "status_config_load_failed" => {
+            "Config load failed: {0}; original file backed up, defaults loaded"
+        }
         "status_auto_switched" => "Auto-switched to: {0}",
         "status_switched" => "Switched to: {0}",
         "status_switch_failed" => "Switch failed: {0}",
@@ -106,7 +118,9 @@ pub fn get(key: &str) -> &str {
         "status_paste_empty" => "Paste content is empty",
         "status_no_active_import" => "No active account, please import one first",
         "status_updated" => "Account info updated",
-        "status_parse_no_fields" => "No account info recognized (plan / usage / remaining days / reset time); make sure this is the complete output of atomcode /login",
+        "status_parse_no_fields" => {
+            "No account info recognized (plan / usage / remaining days / reset time); make sure this is the complete output of atomcode /login"
+        }
         "status_auth_cleared" => "Auth cleared",
         "status_clear_failed" => "Clear failed: {0}",
         "status_auto_fetch_cancelled" => "Auto-fetch cancelled",
@@ -119,7 +133,9 @@ pub fn get(key: &str) -> &str {
         "status_imported_hint" => "Imported: {0} (info unknown, click Update Info to run /login)",
         "fetch_no_output" => "(No output received; retry or paste the /login output manually)",
         "fetch_spawn_failed" => "(Unable to run atomcode login: {0})",
-        "fetch_timeout" => "(Timed out fetching login info; retry or paste the /login output manually)",
+        "fetch_timeout" => {
+            "(Timed out fetching login info; retry or paste the /login output manually)"
+        }
 
         // fallback
         _ => key,

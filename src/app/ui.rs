@@ -1,9 +1,9 @@
 //! UI 渲染：update() 入口 + 所有面板和对话框
 
-use crate::app::{AtomcodeSwitchApp, SettingsState};
-use crate::models::AppConfig;
-use crate::io::{atomcode_io, config_io};
 use crate::app::theme;
+use crate::app::{AtomcodeSwitchApp, SettingsState};
+use crate::io::{atomcode_io, config_io};
+use crate::models::AppConfig;
 use crate::ops::time_utils::parse_reset_datetime;
 use eframe::egui;
 use theme::*;
@@ -15,6 +15,40 @@ enum CardAction {
     OpenUpdate,
 }
 
+/// 账号卡片的视觉状态，统一驱动徽标、卡片底色/边框与进度条的语义配色。
+/// 与"是否激活"正交：未激活是常态，不应被误判为过期。
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum AccountVisualState {
+    Invalid,
+    Expired,
+    Expiring,
+    Normal,
+}
+
+impl AccountVisualState {
+    /// 卡片底色与边框色：正常卡片沿用白底 + 激活红边/非激活灰边；
+    /// 异常/过期卡片用极淡灰白底 + 语义色边框，在层级上弱化并提示处理。
+    fn card_colors(self, is_active: bool) -> (egui::Color32, egui::Color32) {
+        match self {
+            Self::Invalid => (CARD_EXPIRED_BG, STATUS_INVALID_FG),
+            Self::Expired | Self::Expiring => (CARD_EXPIRED_BG, STATUS_WARN_FG),
+            Self::Normal => (
+                egui::Color32::WHITE,
+                if is_active { GITHUB_RED } else { GITHUB_BORDER },
+            ),
+        }
+    }
+
+    /// 进度条填充色：异常/过期卡片改用语义色，正常卡片仍按用量百分比着色。
+    fn progress_color(self, usage_percent: f32) -> egui::Color32 {
+        match self {
+            Self::Invalid => STATUS_INVALID_FG,
+            Self::Expired | Self::Expiring => STATUS_WARN_FG,
+            Self::Normal => theme::progress_bar_color(usage_percent),
+        }
+    }
+}
+
 /// 状态方块徽标：底色矩形 + 同色描边 + 文字，直接用 painter 绘制，
 /// 避免禁用态按钮样式覆盖自定义填充色
 fn status_badge(ui: &mut egui::Ui, text: impl Into<String>, fg: egui::Color32, bg: egui::Color32) {
@@ -24,7 +58,12 @@ fn status_badge(ui: &mut egui::Ui, text: impl Into<String>, fg: egui::Color32, b
     let (rect, _) = ui.allocate_exact_size(size, egui::Sense::hover());
     let painter = ui.painter();
     painter.rect_filled(rect, 4.0, bg);
-    painter.rect(rect, 4.0, egui::Color32::TRANSPARENT, egui::Stroke::new(1.0_f32, fg));
+    painter.rect(
+        rect,
+        4.0,
+        egui::Color32::TRANSPARENT,
+        egui::Stroke::new(1.0_f32, fg),
+    );
     painter.galley(
         egui::pos2(rect.left() + 6.0, rect.center().y - galley.size().y / 2.0),
         galley,
@@ -67,16 +106,20 @@ impl eframe::App for AtomcodeSwitchApp {
                                 crate::i18n::lang::Language::EnUs => "中",
                             };
                             if ui
-                                .add(
-                                    style_button_borderless(
-                                        egui::Button::new(egui::RichText::new(lang_label).size(13.0).color(GITHUB_TEXT_PRIMARY))
-                                    )
-                                )
+                                .add(style_button_borderless(egui::Button::new(
+                                    egui::RichText::new(lang_label)
+                                        .size(13.0)
+                                        .color(GITHUB_TEXT_PRIMARY),
+                                )))
                                 .clicked()
                             {
                                 let new_lang = match current_lang {
-                                    crate::i18n::lang::Language::ZhCn => crate::i18n::lang::Language::EnUs,
-                                    crate::i18n::lang::Language::EnUs => crate::i18n::lang::Language::ZhCn,
+                                    crate::i18n::lang::Language::ZhCn => {
+                                        crate::i18n::lang::Language::EnUs
+                                    }
+                                    crate::i18n::lang::Language::EnUs => {
+                                        crate::i18n::lang::Language::ZhCn
+                                    }
                                 };
                                 self.i18n = crate::i18n::I18n::load(new_lang);
                                 self.config.language = new_lang.as_str().to_string();
@@ -87,11 +130,11 @@ impl eframe::App for AtomcodeSwitchApp {
 
                             // 设置
                             if ui
-                                .add(
-                                    style_button_borderless(
-                                        egui::Button::new(egui::RichText::new(self.i18n.t0("toolbar_settings")).size(13.0).color(GITHUB_TEXT_PRIMARY))
-                                    )
-                                )
+                                .add(style_button_borderless(egui::Button::new(
+                                    egui::RichText::new(self.i18n.t0("toolbar_settings"))
+                                        .size(13.0)
+                                        .color(GITHUB_TEXT_PRIMARY),
+                                )))
                                 .clicked()
                             {
                                 self.show_settings = !self.show_settings;
@@ -99,13 +142,11 @@ impl eframe::App for AtomcodeSwitchApp {
 
                             // 同步登录信息
                             if ui
-                                .add(
-                                    style_button_borderless(
-                                        egui::Button::new(
-                                            egui::RichText::new(self.i18n.t0("toolbar_sync")).size(13.0).color(GITHUB_TEXT_PRIMARY),
-                                        )
-                                    )
-                                )
+                                .add(style_button_borderless(egui::Button::new(
+                                    egui::RichText::new(self.i18n.t0("toolbar_sync"))
+                                        .size(13.0)
+                                        .color(GITHUB_TEXT_PRIMARY),
+                                )))
                                 .clicked()
                             {
                                 self.import_current_auth();
@@ -121,7 +162,7 @@ impl eframe::App for AtomcodeSwitchApp {
         egui::TopBottomPanel::bottom("bottom_panel")
             .exact_height(38.0)
             .show(ctx, |ui| {
-            ui.horizontal_centered(|ui| {
+                ui.horizontal_centered(|ui| {
                     ui.add_space(8.0);
 
                     let count = self.config.accounts.len();
@@ -143,23 +184,35 @@ impl eframe::App for AtomcodeSwitchApp {
                     ui.label(
                         egui::RichText::new("\u{25CF}")
                             .size(10.0)
-                            .color(if active_valid { GITHUB_GREEN } else { GITHUB_RED }),
+                            .color(if active_valid {
+                                GITHUB_GREEN
+                            } else {
+                                GITHUB_RED
+                            }),
                     );
                     ui.label(
-                        egui::RichText::new(if active_valid { self.i18n.t0("status_normal") } else { self.i18n.t0("status_error") })
-                            .size(12.0)
-                            .color(if active_valid { GITHUB_GREEN } else { GITHUB_RED }),
+                        egui::RichText::new(if active_valid {
+                            self.i18n.t0("status_normal")
+                        } else {
+                            self.i18n.t0("status_error")
+                        })
+                        .size(12.0)
+                        .color(if active_valid {
+                            GITHUB_GREEN
+                        } else {
+                            GITHUB_RED
+                        }),
                     );
 
                     ui.separator();
 
                     // 导出按钮
                     if ui
-                        .add(
-                            style_button_borderless(
-                                egui::Button::new(egui::RichText::new(self.i18n.t0("btn_export")).size(12.0).color(GITHUB_TEXT_PRIMARY))
-                            )
-                        )
+                        .add(style_button_borderless(egui::Button::new(
+                            egui::RichText::new(self.i18n.t0("btn_export"))
+                                .size(12.0)
+                                .color(GITHUB_TEXT_PRIMARY),
+                        )))
                         .clicked()
                     {
                         self.handle_export();
@@ -167,11 +220,11 @@ impl eframe::App for AtomcodeSwitchApp {
 
                     // 清空登录按钮
                     if ui
-                        .add(
-                            style_button_borderless(
-                                egui::Button::new(egui::RichText::new(self.i18n.t0("btn_clear_auth")).size(12.0).color(GITHUB_TEXT_PRIMARY))
-                            )
-                        )
+                        .add(style_button_borderless(egui::Button::new(
+                            egui::RichText::new(self.i18n.t0("btn_clear_auth"))
+                                .size(12.0)
+                                .color(GITHUB_TEXT_PRIMARY),
+                        )))
                         .clicked()
                     {
                         match atomcode_io::clear_auth(&self.config.custom_atomcode_dir) {
@@ -329,9 +382,14 @@ impl AtomcodeSwitchApp {
 
                 // 底部按钮面板：先声明，保证始终贴底且可见
                 egui::TopBottomPanel::bottom("manual_update_buttons")
-                    .frame(egui::Frame::central_panel(&ctx.style()).inner_margin(
-                        egui::Margin { left: 12.0, right: 12.0, top: 4.0, bottom: 12.0 },
-                    ))
+                    .frame(
+                        egui::Frame::central_panel(&ctx.style()).inner_margin(egui::Margin {
+                            left: 12.0,
+                            right: 12.0,
+                            top: 4.0,
+                            bottom: 12.0,
+                        }),
+                    )
                     .show(ctx, |ui| {
                         ui.horizontal(|ui| {
                             let has_text = !self.manual_update_text.trim().is_empty();
@@ -344,7 +402,11 @@ impl AtomcodeSwitchApp {
                                             .color(egui::Color32::WHITE),
                                     )
                                     .rounding(4.0)
-                                    .fill(if has_text { GITHUB_BLUE } else { GITHUB_BORDER }),
+                                    .fill(if has_text {
+                                        GITHUB_BLUE
+                                    } else {
+                                        GITHUB_BORDER
+                                    }),
                                 )
                                 .clicked()
                             {
@@ -372,7 +434,9 @@ impl AtomcodeSwitchApp {
                                                 crate::app::UpdateMessageKind::Success,
                                                 msg,
                                             );
-                                            self.schedule_update_window_close(std::time::Duration::from_millis(1500));
+                                            self.schedule_update_window_close(
+                                                std::time::Duration::from_millis(1500),
+                                            );
                                         }
                                         Err(e) => {
                                             // 解析失败：窗口与原始内容保留，消息区显示「解析失败」
@@ -397,118 +461,114 @@ impl AtomcodeSwitchApp {
                 egui::CentralPanel::default()
                     .frame(egui::Frame::central_panel(&ctx.style()).inner_margin(12.0))
                     .show(ctx, |ui| {
-                    ui.horizontal(|ui| {
-                        ui.label(
-                            egui::RichText::new(self.i18n.t0("update_desc"))
-                                .size(12.0)
-                                .color(GITHUB_TEXT_SECONDARY),
-                        );
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if self.is_auto_updating {
-                                ui.label(
-                                    egui::RichText::new(self.i18n.t0("update_fetching"))
-                                        .size(13.0)
-                                        .color(GITHUB_BLUE)
-                                        .strong(),
-                                );
-                                if ui
-                                    .add(
-                                        style_button_danger(
-                                            egui::Button::new(
-                                                egui::RichText::new(self.i18n.t0("update_cancel")).size(12.0),
-                                            ),
-                                        ),
-                                    )
-                                    .clicked()
-                                {
-                                    self.cancel_auto_fetch();
-                                    self.status_message = self.i18n.t0("status_auto_fetch_cancelled");
-                                }
-                            } else {
-                                if ui
-                                    .add(
-                                        style_button_primary(
-                                            egui::Button::new(
-                                                egui::RichText::new(self.i18n.t0("update_auto_fetch"))
-                                                    .size(13.0)
-                                                    .color(egui::Color32::WHITE),
-                                            ),
-                                        ),
-                                    )
-                                    .clicked()
-                                {
-                                    self.manual_update_text.clear();
-                                    // 重新获取成功后自动解析更新
-                                    self.reset_for_new_fetch();
-                                    self.clear_update_message();
-                                    self.auto_parse_pending = true;
-                                    self.start_auto_update();
-                                }
-                            }
-                        });
-                    });
-
-                    ui.add_space(8.0);
-
-                    // 消息区：解析/获取的结果（成功或失败）都显示在窗口内
-                    if let Some(msg) = self.update_message.clone() {
-                        use crate::app::UpdateMessageKind::{Error, Info, Success};
-                        let (title, accent, bg) = match msg.kind {
-                            Info => (
-                                String::new(),
-                                GITHUB_BLUE,
-                                MSG_INFO_BG,
-                            ),
-                            Success => (
-                                self.i18n.t0("update_success_title"),
-                                GITHUB_GREEN,
-                                MSG_SUCCESS_BG,
-                            ),
-                            Error => (
-                                self.i18n.t0("update_error_title"),
-                                GITHUB_RED,
-                                MSG_ERROR_BG,
-                            ),
-                        };
-
-                        egui::Frame::none()
-                            .fill(bg)
-                            .stroke(egui::Stroke::new(1.0_f32, accent))
-                            .rounding(4.0)
-                            .inner_margin(egui::Margin::same(8.0))
-                            .show(ui, |ui| {
-                                if !title.is_empty() {
-                                    ui.label(
-                                        egui::RichText::new(title).size(12.0).strong().color(accent),
-                                    );
-                                }
-                                ui.label(
-                                    egui::RichText::new(&msg.text).size(12.0).color(accent),
-                                );
-                                if msg.kind == Error {
-                                    ui.label(
-                                        egui::RichText::new(self.i18n.t0("update_error_hint"))
-                                            .size(11.0)
-                                            .color(GITHUB_TEXT_SECONDARY),
-                                    );
-                                }
-                            });
-
-                        ui.add_space(8.0);
-                    }
-
-                    // 文本框占据剩余全部空间，按钮行贴底
-                    egui::ScrollArea::vertical()
-                        .auto_shrink(false)
-                        .show(ui, |ui| {
-                            ui.add_sized(
-                                ui.available_size(),
-                                egui::TextEdit::multiline(&mut self.manual_update_text)
-                                    .hint_text(self.i18n.t0("update_hint"))
-                                    .code_editor()
-                                    .desired_width(f32::INFINITY),
+                        ui.horizontal(|ui| {
+                            ui.label(
+                                egui::RichText::new(self.i18n.t0("update_desc"))
+                                    .size(12.0)
+                                    .color(GITHUB_TEXT_SECONDARY),
+                            );
+                            ui.with_layout(
+                                egui::Layout::right_to_left(egui::Align::Center),
+                                |ui| {
+                                    if self.is_auto_updating {
+                                        ui.label(
+                                            egui::RichText::new(self.i18n.t0("update_fetching"))
+                                                .size(13.0)
+                                                .color(GITHUB_BLUE)
+                                                .strong(),
+                                        );
+                                        if ui
+                                            .add(style_button_danger(egui::Button::new(
+                                                egui::RichText::new(self.i18n.t0("update_cancel"))
+                                                    .size(12.0),
+                                            )))
+                                            .clicked()
+                                        {
+                                            self.cancel_auto_fetch();
+                                            self.status_message =
+                                                self.i18n.t0("status_auto_fetch_cancelled");
+                                        }
+                                    } else {
+                                        if ui
+                                            .add(style_button_primary(egui::Button::new(
+                                                egui::RichText::new(
+                                                    self.i18n.t0("update_auto_fetch"),
+                                                )
+                                                .size(13.0)
+                                                .color(egui::Color32::WHITE),
+                                            )))
+                                            .clicked()
+                                        {
+                                            self.manual_update_text.clear();
+                                            // 重新获取成功后自动解析更新
+                                            self.reset_for_new_fetch();
+                                            self.clear_update_message();
+                                            self.auto_parse_pending = true;
+                                            self.start_auto_update();
+                                        }
+                                    }
+                                },
                             );
                         });
+
+                        ui.add_space(8.0);
+
+                        // 消息区：解析/获取的结果（成功或失败）都显示在窗口内
+                        if let Some(msg) = self.update_message.clone() {
+                            use crate::app::UpdateMessageKind::{Error, Info, Success};
+                            let (title, accent, bg) = match msg.kind {
+                                Info => (String::new(), GITHUB_BLUE, MSG_INFO_BG),
+                                Success => (
+                                    self.i18n.t0("update_success_title"),
+                                    GITHUB_GREEN,
+                                    MSG_SUCCESS_BG,
+                                ),
+                                Error => {
+                                    (self.i18n.t0("update_error_title"), GITHUB_RED, MSG_ERROR_BG)
+                                }
+                            };
+
+                            egui::Frame::none()
+                                .fill(bg)
+                                .stroke(egui::Stroke::new(1.0_f32, accent))
+                                .rounding(4.0)
+                                .inner_margin(egui::Margin::same(8.0))
+                                .show(ui, |ui| {
+                                    if !title.is_empty() {
+                                        ui.label(
+                                            egui::RichText::new(title)
+                                                .size(12.0)
+                                                .strong()
+                                                .color(accent),
+                                        );
+                                    }
+                                    ui.label(
+                                        egui::RichText::new(&msg.text).size(12.0).color(accent),
+                                    );
+                                    if msg.kind == Error {
+                                        ui.label(
+                                            egui::RichText::new(self.i18n.t0("update_error_hint"))
+                                                .size(11.0)
+                                                .color(GITHUB_TEXT_SECONDARY),
+                                        );
+                                    }
+                                });
+
+                            ui.add_space(8.0);
+                        }
+
+                        // 文本框占据剩余全部空间，按钮行贴底
+                        egui::ScrollArea::vertical()
+                            .auto_shrink(false)
+                            .show(ui, |ui| {
+                                ui.add_sized(
+                                    ui.available_size(),
+                                    egui::TextEdit::multiline(&mut self.manual_update_text)
+                                        .hint_text(self.i18n.t0("update_hint"))
+                                        .code_editor()
+                                        .desired_width(f32::INFINITY),
+                                );
+                            });
                     });
 
                 // 点击系统标题栏 X 时关闭子窗口
@@ -557,11 +617,13 @@ impl AtomcodeSwitchApp {
             if ui
                 .selectable_label(
                     sort_mode == crate::models::SortMode::None,
-                    egui::RichText::new(&none_text).size(13.0).color(if sort_mode == crate::models::SortMode::None {
-                        GITHUB_BLUE
-                    } else {
-                        GITHUB_TEXT_PRIMARY
-                    }),
+                    egui::RichText::new(&none_text).size(13.0).color(
+                        if sort_mode == crate::models::SortMode::None {
+                            GITHUB_BLUE
+                        } else {
+                            GITHUB_TEXT_PRIMARY
+                        },
+                    ),
                 )
                 .clicked()
             {
@@ -571,11 +633,13 @@ impl AtomcodeSwitchApp {
             if ui
                 .selectable_label(
                     sort_mode == crate::models::SortMode::WindowRemaining,
-                    egui::RichText::new(&remaining_text).size(13.0).color(if sort_mode == crate::models::SortMode::WindowRemaining {
-                        GITHUB_BLUE
-                    } else {
-                        GITHUB_TEXT_PRIMARY
-                    }),
+                    egui::RichText::new(&remaining_text).size(13.0).color(
+                        if sort_mode == crate::models::SortMode::WindowRemaining {
+                            GITHUB_BLUE
+                        } else {
+                            GITHUB_TEXT_PRIMARY
+                        },
+                    ),
                 )
                 .clicked()
             {
@@ -585,11 +649,13 @@ impl AtomcodeSwitchApp {
             if ui
                 .selectable_label(
                     sort_mode == crate::models::SortMode::ResetTime,
-                    egui::RichText::new(&reset_text).size(13.0).color(if sort_mode == crate::models::SortMode::ResetTime {
-                        GITHUB_BLUE
-                    } else {
-                        GITHUB_TEXT_PRIMARY
-                    }),
+                    egui::RichText::new(&reset_text).size(13.0).color(
+                        if sort_mode == crate::models::SortMode::ResetTime {
+                            GITHUB_BLUE
+                        } else {
+                            GITHUB_TEXT_PRIMARY
+                        },
+                    ),
                 )
                 .clicked()
             {
@@ -608,13 +674,21 @@ impl AtomcodeSwitchApp {
         is_active: bool,
         action: &std::cell::Cell<Option<CardAction>>,
     ) {
+        let visual_state = if !acc.is_valid {
+            AccountVisualState::Invalid
+        } else if self.is_account_expired(acc) {
+            AccountVisualState::Expired
+        } else if self.is_expiring_soon(acc) {
+            AccountVisualState::Expiring
+        } else {
+            AccountVisualState::Normal
+        };
+        let (card_bg, card_stroke) = visual_state.card_colors(is_active);
+
         egui::Frame::default()
-            .fill(egui::Color32::WHITE)
+            .fill(card_bg)
             .rounding(10.0)
-            .stroke(egui::Stroke::new(
-                1.0_f32,
-                if is_active { GITHUB_RED } else { GITHUB_BORDER },
-            ))
+            .stroke(egui::Stroke::new(1.0_f32, card_stroke))
             .inner_margin(egui::Margin::symmetric(20.0, 16.0))
             .outer_margin(egui::Margin::symmetric(12.0, 8.0))
             .shadow(egui::epaint::Shadow {
@@ -626,9 +700,15 @@ impl AtomcodeSwitchApp {
             .show(ui, |ui| {
                 // ---- 卡片顶部 ----
                 ui.horizontal(|ui| {
-                    let (rect, _) = ui.allocate_exact_size(egui::vec2(36.0, 36.0), egui::Sense::hover());
-                    let avatar_color = if is_active { GITHUB_BLUE } else { GITHUB_AVATAR_INACTIVE };
-                    ui.painter().circle_filled(rect.center(), 18.0, avatar_color);
+                    let (rect, _) =
+                        ui.allocate_exact_size(egui::vec2(36.0, 36.0), egui::Sense::hover());
+                    let avatar_color = if is_active {
+                        GITHUB_BLUE
+                    } else {
+                        GITHUB_AVATAR_INACTIVE
+                    };
+                    ui.painter()
+                        .circle_filled(rect.center(), 18.0, avatar_color);
                     let initial = acc.auth_data.user.name.chars().next().unwrap_or('?');
                     ui.painter().text(
                         rect.center(),
@@ -649,36 +729,35 @@ impl AtomcodeSwitchApp {
                                     .strong(),
                             );
                             ui.add_space(4.0);
-                            if !acc.is_valid {
+                            match visual_state {
                                 // 已失效（功能不可用）：柔和浅红底 + 错误红字
-                                status_badge(
+                                AccountVisualState::Invalid => status_badge(
                                     ui,
                                     self.i18n.t0("card_invalid"),
                                     STATUS_INVALID_FG,
                                     STATUS_INVALID_BG,
-                                );
-                            } else if self.is_account_expired(acc) {
+                                ),
                                 // 已过期但需用户关注：暖色底 + 深橙字
-                                status_badge(
+                                AccountVisualState::Expired => status_badge(
                                     ui,
                                     self.i18n.t0("card_expired"),
                                     STATUS_WARN_FG,
                                     STATUS_WARN_BG,
-                                );
-                            } else if self.is_expiring_soon(acc) {
+                                ),
                                 // 即将过期（1 小时内重置）：暖色提醒
-                                status_badge(
+                                AccountVisualState::Expiring => status_badge(
                                     ui,
                                     self.i18n.t0("card_expiring"),
                                     STATUS_WARN_FG,
                                     STATUS_WARN_BG,
-                                );
-                            } else {
-                                ui.label(
-                                    egui::RichText::new(self.i18n.t0("card_valid"))
-                                        .size(11.0)
-                                        .color(CARD_VALID),
-                                );
+                                ),
+                                AccountVisualState::Normal => {
+                                    ui.label(
+                                        egui::RichText::new(self.i18n.t0("card_valid"))
+                                            .size(11.0)
+                                            .color(CARD_VALID),
+                                    );
+                                }
                             }
                         });
                         ui.label(
@@ -767,9 +846,12 @@ impl AtomcodeSwitchApp {
                     );
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         ui.label(
-                            egui::RichText::new(self.i18n.t1("card_remaining_days", &acc.remaining_days.to_string()))
-                                .size(12.0)
-                                .color(CARD_SECONDARY_TEXT),
+                            egui::RichText::new(
+                                self.i18n
+                                    .t1("card_remaining_days", &acc.remaining_days.to_string()),
+                            )
+                            .size(12.0)
+                            .color(CARD_SECONDARY_TEXT),
                         );
                     });
                 });
@@ -811,8 +893,8 @@ impl AtomcodeSwitchApp {
                         bar_rect.min,
                         egui::pos2(bar_rect.min.x + fill_width, bar_rect.max.y),
                     );
-                    ui.painter()
-                        .rect_filled(fill_rect, 3.0, theme::progress_bar_color(acc.usage_percent));
+                    let fill_color = visual_state.progress_color(acc.usage_percent);
+                    ui.painter().rect_filled(fill_rect, 3.0, fill_color);
                 }
 
                 ui.add_space(6.0);
@@ -841,22 +923,22 @@ impl AtomcodeSwitchApp {
         ui.add_space(40.0);
         ui.vertical_centered(|ui| {
             ui.add_space(12.0);
-                    ui.label(
-                        egui::RichText::new(self.i18n.t0("empty_no_accounts"))
-                            .size(18.0)
-                            .color(GITHUB_TEXT_SECONDARY),
-                    );
-                    ui.add_space(8.0);
-                    ui.label(
-                        egui::RichText::new(self.i18n.t0("empty_hint"))
-                            .size(13.0)
-                            .color(GITHUB_TEXT_SECONDARY),
-                    );
-                    ui.add_space(16.0);
-                    let import_btn = ui.add(
-                        egui::Button::new(
-                            egui::RichText::new(self.i18n.t0("empty_import"))
-                                .size(14.0)
+            ui.label(
+                egui::RichText::new(self.i18n.t0("empty_no_accounts"))
+                    .size(18.0)
+                    .color(GITHUB_TEXT_SECONDARY),
+            );
+            ui.add_space(8.0);
+            ui.label(
+                egui::RichText::new(self.i18n.t0("empty_hint"))
+                    .size(13.0)
+                    .color(GITHUB_TEXT_SECONDARY),
+            );
+            ui.add_space(16.0);
+            let import_btn = ui.add(
+                egui::Button::new(
+                    egui::RichText::new(self.i18n.t0("empty_import"))
+                        .size(14.0)
                         .color(egui::Color32::WHITE),
                 )
                 .rounding(6.0)
@@ -902,7 +984,7 @@ impl AtomcodeSwitchApp {
                         blur: 24.0,
                         spread: 0.0,
                         color: egui::Color32::from_black_alpha(32),
-                    })
+                    }),
             )
             .show(ctx, |ui| {
                 ui.add_space(8.0);
@@ -910,7 +992,9 @@ impl AtomcodeSwitchApp {
                 if let Some(ref mut state) = self.settings_state {
                     // 导出目录
                     ui.label(
-                        egui::RichText::new(self.i18n.t0("settings_export_dir")).size(14.0).strong(),
+                        egui::RichText::new(self.i18n.t0("settings_export_dir"))
+                            .size(14.0)
+                            .strong(),
                     );
                     ui.label(
                         egui::RichText::new(self.i18n.t0("settings_export_dir_desc"))
@@ -925,23 +1009,30 @@ impl AtomcodeSwitchApp {
                                 .hint_text(self.i18n.t0("settings_export_dir_hint")),
                         );
                         if ui.button(self.i18n.t0("settings_browse")).clicked() {
-                            if let Some(dir) =
-                                tinyfiledialogs::select_folder_dialog(&self.i18n.t0("dialog_select_data_dir"), &state.data_dir)
-                            {
+                            if let Some(dir) = tinyfiledialogs::select_folder_dialog(
+                                &self.i18n.t0("dialog_select_data_dir"),
+                                &state.data_dir,
+                            ) {
                                 // 浏览只更新临时目录；实际导入在「确定」时执行。
                                 // 若目标目录已有数据，先弹出冲突确认。
-                                let accounts_path = std::path::Path::new(&dir)
-                                    .join("atomcode-accounts.yaml");
+                                let accounts_path =
+                                    std::path::Path::new(&dir).join("atomcode-accounts.yaml");
                                 let mut confirmed_import = true;
                                 if accounts_path.exists() {
                                     let existing = Self::load_accounts_from(&accounts_path);
-                                    let existing_accounts = existing.as_ref().map(|c| c.accounts.as_slice()).unwrap_or(&[]);
+                                    let existing_accounts = existing
+                                        .as_ref()
+                                        .map(|c| c.accounts.as_slice())
+                                        .unwrap_or(&[]);
                                     let msg = self.i18n.t4(
                                         "dialog_switch_dir_msg",
                                         &existing_accounts.len().to_string(),
                                         &Self::format_account_lines(&self.i18n, existing_accounts),
                                         &self.config.accounts.len().to_string(),
-                                        &Self::format_account_lines(&self.i18n, &self.config.accounts),
+                                        &Self::format_account_lines(
+                                            &self.i18n,
+                                            &self.config.accounts,
+                                        ),
                                     );
                                     confirmed_import = matches!(
                                         tinyfiledialogs::message_box_yes_no(
@@ -954,7 +1045,8 @@ impl AtomcodeSwitchApp {
                                     );
                                 }
                                 if confirmed_import {
-                                    let accounts_path = std::path::Path::new(&dir).join("atomcode-accounts.yaml");
+                                    let accounts_path =
+                                        std::path::Path::new(&dir).join("atomcode-accounts.yaml");
                                     if accounts_path.exists() {
                                         state.pending_import_data_dir = Some(dir.clone());
                                     }
@@ -968,7 +1060,9 @@ impl AtomcodeSwitchApp {
 
                     // Atomcode 目录
                     ui.label(
-                        egui::RichText::new(self.i18n.t0("settings_atomcode_dir")).size(14.0).strong(),
+                        egui::RichText::new(self.i18n.t0("settings_atomcode_dir"))
+                            .size(14.0)
+                            .strong(),
                     );
                     ui.label(
                         egui::RichText::new(self.i18n.t0("settings_atomcode_dir_desc"))
@@ -996,10 +1090,15 @@ impl AtomcodeSwitchApp {
 
                     // 自动切换规则
                     ui.label(
-                        egui::RichText::new(self.i18n.t0("settings_auto_switch")).size(14.0).strong(),
+                        egui::RichText::new(self.i18n.t0("settings_auto_switch"))
+                            .size(14.0)
+                            .strong(),
                     );
                     ui.add_space(4.0);
-                    ui.checkbox(&mut state.auto_switch_enabled, self.i18n.t0("settings_enable_auto_switch"));
+                    ui.checkbox(
+                        &mut state.auto_switch_enabled,
+                        self.i18n.t0("settings_enable_auto_switch"),
+                    );
                     ui.add_space(4.0);
                     ui.horizontal(|ui| {
                         ui.label(self.i18n.t0("settings_usage_exceeds"));
@@ -1046,13 +1145,11 @@ impl AtomcodeSwitchApp {
                         self.config.auto_switch_rules = config.auto_switch_rules;
                     }
                 }
-                config_io::set_custom_data_dir(
-                    if state.data_dir.is_empty() {
-                        None
-                    } else {
-                        Some(state.data_dir.clone())
-                    },
-                );
+                config_io::set_custom_data_dir(if state.data_dir.is_empty() {
+                    None
+                } else {
+                    Some(state.data_dir.clone())
+                });
                 self.config.custom_atomcode_dir = if state.atomcode_dir.is_empty() {
                     None
                 } else {
@@ -1111,11 +1208,17 @@ impl AtomcodeSwitchApp {
     fn handle_export(&mut self) {
         // 默认文件名与数据目录下的账号文件一致，避免用户按默认名导出后
         // 在切换数据目录时找不到可导入的文件；同时不与本地 config.yaml 混淆。
-        if let Some(path_str) = tinyfiledialogs::save_file_dialog(&self.i18n.t0("dialog_export_title"), "atomcode-accounts.yaml") {
+        if let Some(path_str) = tinyfiledialogs::save_file_dialog(
+            &self.i18n.t0("dialog_export_title"),
+            "atomcode-accounts.yaml",
+        ) {
             let path = std::path::Path::new(&path_str);
             let should_overwrite = if path.exists() {
                 let existing = Self::load_accounts_from(path);
-                let existing_accounts = existing.as_ref().map(|c| c.accounts.as_slice()).unwrap_or(&[]);
+                let existing_accounts = existing
+                    .as_ref()
+                    .map(|c| c.accounts.as_slice())
+                    .unwrap_or(&[]);
                 let msg = self.i18n.t4(
                     "dialog_overwrite_msg",
                     &existing_accounts.len().to_string(),
@@ -1162,22 +1265,45 @@ impl AtomcodeSwitchApp {
         let now = chrono::Local::now();
         let target = match parse_reset_datetime(reset_time, now) {
             Some(t) => t,
-            None => return (self.i18n.t1("card_reset_label", reset_time), GITHUB_TEXT_SECONDARY),
+            None => {
+                return (
+                    self.i18n.t1("card_reset_label", reset_time),
+                    GITHUB_TEXT_SECONDARY,
+                );
+            }
         };
         let diff_secs = (target - now).num_seconds();
         if diff_secs < 0 {
             // 已过期但需用户关注：暖橙提醒
-            return (self.i18n.t1("card_reset_expired", reset_time.trim()), STATUS_WARN_FG);
+            return (
+                self.i18n.t1("card_reset_expired", reset_time.trim()),
+                STATUS_WARN_FG,
+            );
         }
         let diff = diff_secs as u64;
         let minutes = diff / 60;
         let seconds = diff % 60;
         // 即将过期（1 小时内）也用暖色提醒
-        let color = if diff < 3600 { STATUS_WARN_FG } else { GITHUB_TEXT_SECONDARY };
-        let text = if diff >= 3600 {
-            self.i18n.t4("card_reset_countdown_h", reset_time.trim(), &(diff / 3600).to_string(), &(minutes % 60).to_string(), &seconds.to_string())
+        let color = if diff < 3600 {
+            STATUS_WARN_FG
         } else {
-            self.i18n.t3("card_reset_countdown", reset_time.trim(), &minutes.to_string(), &seconds.to_string())
+            GITHUB_TEXT_SECONDARY
+        };
+        let text = if diff >= 3600 {
+            self.i18n.t4(
+                "card_reset_countdown_h",
+                reset_time.trim(),
+                &(diff / 3600).to_string(),
+                &(minutes % 60).to_string(),
+                &seconds.to_string(),
+            )
+        } else {
+            self.i18n.t3(
+                "card_reset_countdown",
+                reset_time.trim(),
+                &minutes.to_string(),
+                &seconds.to_string(),
+            )
         };
         (text, color)
     }
@@ -1197,7 +1323,11 @@ impl AtomcodeSwitchApp {
             let is_active_a = active_id.as_deref() == Some(a.id.as_str());
             let is_active_b = active_id.as_deref() == Some(b.id.as_str());
             if is_active_a != is_active_b {
-                return if is_active_a { std::cmp::Ordering::Less } else { std::cmp::Ordering::Greater };
+                return if is_active_a {
+                    std::cmp::Ordering::Less
+                } else {
+                    std::cmp::Ordering::Greater
+                };
             }
             let reset_a = parse_reset_datetime(&a.reset_time, now);
             let reset_b = parse_reset_datetime(&b.reset_time, now);
@@ -1210,15 +1340,15 @@ impl AtomcodeSwitchApp {
             let remaining_a = 100.0 - a.usage_percent;
             let remaining_b = 100.0 - b.usage_percent;
             match self.config.sort_mode {
-                SortMode::ResetTime => {
-                    reset_a
-                        .cmp(&reset_b)
-                        .then(remaining_b.partial_cmp(&remaining_a).unwrap_or(std::cmp::Ordering::Equal))
-                }
-                SortMode::WindowRemaining => {
-                    remaining_b.partial_cmp(&remaining_a).unwrap_or(std::cmp::Ordering::Equal)
-                        .then(reset_a.cmp(&reset_b))
-                }
+                SortMode::ResetTime => reset_a.cmp(&reset_b).then(
+                    remaining_b
+                        .partial_cmp(&remaining_a)
+                        .unwrap_or(std::cmp::Ordering::Equal),
+                ),
+                SortMode::WindowRemaining => remaining_b
+                    .partial_cmp(&remaining_a)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+                    .then(reset_a.cmp(&reset_b)),
                 // None 已在上方提前按名称排序返回，不会走到这里
                 SortMode::None => std::cmp::Ordering::Equal,
             }

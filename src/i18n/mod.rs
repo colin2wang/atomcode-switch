@@ -95,7 +95,10 @@ mod tests {
         let i18n = I18n::load(Language::ZhCn);
         // 参数本身含 {1}，不应被后续替换误伤
         let result = i18n.t("card_reset_countdown", &["T", "{1}s", "3"]);
-        assert!(result.contains("{1}s"), "参数中的占位符被二次替换: {result}");
+        assert!(
+            result.contains("{1}s"),
+            "参数中的占位符被二次替换: {result}"
+        );
     }
 
     #[test]

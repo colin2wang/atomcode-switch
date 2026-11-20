@@ -179,9 +179,11 @@ mod tests {
 
     #[test]
     fn out_of_range_usage_rejected() {
-        assert!(parse_login_fields("用量约 150%", now())
-            .usage_percent
-            .is_none());
+        assert!(
+            parse_login_fields("用量约 150%", now())
+                .usage_percent
+                .is_none()
+        );
     }
 
     #[test]
