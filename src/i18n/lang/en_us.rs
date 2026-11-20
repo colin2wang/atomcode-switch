@@ -21,6 +21,8 @@ pub fn get(key: &str) -> &str {
         "card_delete" => "Delete",
         "card_valid" => "● Valid",
         "card_invalid" => "● Invalid",
+        "card_expiring" => "● Expiring soon",
+        "card_expired" => "● Expired",
         "card_remaining_days" => "{0} days remaining",
         "card_usage_label" => "Current window usage",
         "card_reset_label" => "Reset: {0}",

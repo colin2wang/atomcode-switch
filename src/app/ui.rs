@@ -15,6 +15,23 @@ enum CardAction {
     OpenUpdate,
 }
 
+/// 状态方块徽标：底色矩形 + 同色描边 + 文字，直接用 painter 绘制，
+/// 避免禁用态按钮样式覆盖自定义填充色
+fn status_badge(ui: &mut egui::Ui, text: impl Into<String>, fg: egui::Color32, bg: egui::Color32) {
+    let font = egui::FontId::proportional(11.0);
+    let galley = ui.painter().layout_no_wrap(text.into(), font, fg);
+    let size = galley.size() + egui::vec2(12.0, 8.0);
+    let (rect, _) = ui.allocate_exact_size(size, egui::Sense::hover());
+    let painter = ui.painter();
+    painter.rect_filled(rect, 4.0, bg);
+    painter.rect(rect, 4.0, egui::Color32::TRANSPARENT, egui::Stroke::new(1.0_f32, fg));
+    painter.galley(
+        egui::pos2(rect.left() + 6.0, rect.center().y - galley.size().y / 2.0),
+        galley,
+        fg,
+    );
+}
+
 impl eframe::App for AtomcodeSwitchApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         let current_time = ctx.input(|i| i.time);
@@ -632,17 +649,35 @@ impl AtomcodeSwitchApp {
                                     .strong(),
                             );
                             ui.add_space(4.0);
-                            if acc.is_valid {
+                            if !acc.is_valid {
+                                // 已失效（功能不可用）：柔和浅红底 + 错误红字
+                                status_badge(
+                                    ui,
+                                    self.i18n.t0("card_invalid"),
+                                    STATUS_INVALID_FG,
+                                    STATUS_INVALID_BG,
+                                );
+                            } else if self.is_account_expired(acc) {
+                                // 已过期但需用户关注：暖色底 + 深橙字
+                                status_badge(
+                                    ui,
+                                    self.i18n.t0("card_expired"),
+                                    STATUS_WARN_FG,
+                                    STATUS_WARN_BG,
+                                );
+                            } else if self.is_expiring_soon(acc) {
+                                // 即将过期（1 小时内重置）：暖色提醒
+                                status_badge(
+                                    ui,
+                                    self.i18n.t0("card_expiring"),
+                                    STATUS_WARN_FG,
+                                    STATUS_WARN_BG,
+                                );
+                            } else {
                                 ui.label(
                                     egui::RichText::new(self.i18n.t0("card_valid"))
                                         .size(11.0)
                                         .color(CARD_VALID),
-                                );
-                            } else {
-                                ui.label(
-                                    egui::RichText::new(self.i18n.t0("card_invalid"))
-                                        .size(11.0)
-                                        .color(CARD_INVALID),
                                 );
                             }
                         });
@@ -1113,6 +1148,14 @@ impl AtomcodeSwitchApp {
         }
     }
 
+    /// 是否即将过期：未过期且将在 1 小时内重置（复用 `parse_reset_datetime` 单一解析入口）
+    fn is_expiring_soon(&self, acc: &crate::models::ManagedAccount) -> bool {
+        let now = chrono::Local::now();
+        parse_reset_datetime(&acc.reset_time, now)
+            .map(|target| target >= now && (target - now).num_seconds() < 3600)
+            .unwrap_or(false)
+    }
+
     /// 从重置时间实时计算倒计时，返回 (文本, 颜色)。
     /// 与过期判断、排序共用 `parse_reset_datetime` 单一解析入口。
     fn format_reset_countdown(&self, reset_time: &str) -> (String, egui::Color32) {
@@ -1123,17 +1166,20 @@ impl AtomcodeSwitchApp {
         };
         let diff_secs = (target - now).num_seconds();
         if diff_secs < 0 {
-            return (self.i18n.t1("card_reset_expired", reset_time.trim()), GITHUB_YELLOW);
+            // 已过期但需用户关注：暖橙提醒
+            return (self.i18n.t1("card_reset_expired", reset_time.trim()), STATUS_WARN_FG);
         }
         let diff = diff_secs as u64;
         let minutes = diff / 60;
         let seconds = diff % 60;
+        // 即将过期（1 小时内）也用暖色提醒
+        let color = if diff < 3600 { STATUS_WARN_FG } else { GITHUB_TEXT_SECONDARY };
         let text = if diff >= 3600 {
             self.i18n.t4("card_reset_countdown_h", reset_time.trim(), &(diff / 3600).to_string(), &(minutes % 60).to_string(), &seconds.to_string())
         } else {
             self.i18n.t3("card_reset_countdown", reset_time.trim(), &minutes.to_string(), &seconds.to_string())
         };
-        (text, GITHUB_TEXT_SECONDARY)
+        (text, color)
     }
 
     /// 按当前配置排序账号卡片：激活账号永远第一；主键为所选方式，另一项作次级键；

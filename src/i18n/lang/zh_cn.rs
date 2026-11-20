@@ -21,6 +21,8 @@ pub fn get(key: &str) -> &str {
         "card_delete" => "删除",
         "card_valid" => "● 正常",
         "card_invalid" => "● 异常",
+        "card_expiring" => "● 即将过期",
+        "card_expired" => "● 已过期",
         "card_remaining_days" => "剩余 {0} 天",
         "card_usage_label" => "当前时间窗口用量",
         "card_reset_label" => "重置: {0}",

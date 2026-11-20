@@ -47,7 +47,7 @@ impl Language {
 pub const ALL_KEYS: &[&str] = &[
     "toolbar_settings", "toolbar_sync", "bottom_accounts", "status_normal", "status_error",
     "btn_export", "btn_clear_auth", "card_in_use", "card_activated", "card_update_info",
-    "card_activate", "card_delete", "card_valid", "card_invalid", "card_remaining_days",
+    "card_activate", "card_delete", "card_valid", "card_invalid", "card_expiring", "card_expired", "card_remaining_days",
     "card_usage_label", "card_reset_label", "card_reset_countdown", "card_reset_countdown_h",
     "card_reset_expired", "empty_no_accounts", "empty_hint", "empty_import", "sort_none",
     "sort_reset_time", "sort_window_remaining", "settings_title", "settings_export_dir",
