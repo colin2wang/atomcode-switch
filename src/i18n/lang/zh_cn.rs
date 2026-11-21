@@ -66,6 +66,7 @@ pub fn get(key: &str) -> &str {
         "update_fetching" => "获取中...",
         "update_cancel" => "取消",
         "update_parse" => "解析并更新",
+        "update_closing" => "即将关闭（{0}）",
         "update_hint" => "在此粘贴 /login 的输出，或点击上方「重新获取」再次获取...",
         "update_error_title" => "解析失败，已保留原窗口与原始内容",
         "update_parse_failed" => "解析失败: {0}",

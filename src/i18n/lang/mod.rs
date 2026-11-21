@@ -94,6 +94,7 @@ pub const ALL_KEYS: &[&str] = &[
     "update_fetching",
     "update_cancel",
     "update_parse",
+    "update_closing",
     "update_hint",
     "update_error_title",
     "update_error_hint",

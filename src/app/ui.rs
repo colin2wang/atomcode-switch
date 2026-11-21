@@ -107,7 +107,13 @@ impl eframe::App for AtomcodeSwitchApp {
         self.poll_auto_fetch();
         self.poll_update_window_close();
 
-        ctx.request_repaint_after(std::time::Duration::from_secs(1));
+        // 关闭倒计时期间提高重绘频率，让剩余秒数更准确；平时保持 1 秒
+        let repaint_after = if self.close_update_after.is_some() {
+            std::time::Duration::from_millis(250)
+        } else {
+            std::time::Duration::from_secs(1)
+        };
+        ctx.request_repaint_after(repaint_after);
 
         // ============ 顶部工具栏 ============
         egui::TopBottomPanel::top("toolbar")
@@ -413,67 +419,83 @@ impl AtomcodeSwitchApp {
             |ctx, class| {
                 debug_assert!(class == egui::ViewportClass::Immediate);
 
-                // 底部按钮面板：先声明，保证始终贴底且可见
+                // 底部按钮栏：白底 + 顶部分隔线，上下留白对称，按钮垂直居中
                 egui::TopBottomPanel::bottom("manual_update_buttons")
                     .frame(
-                        egui::Frame::central_panel(&ctx.style()).inner_margin(egui::Margin {
-                            left: 12.0,
-                            right: 12.0,
-                            top: 4.0,
-                            bottom: 12.0,
-                        }),
+                        egui::Frame::none()
+                            .fill(GITHUB_CARD)
+                            .stroke(egui::Stroke::new(1.0_f32, GITHUB_BORDER))
+                            .inner_margin(egui::Margin::symmetric(16.0, 12.0)),
                     )
                     .show(ctx, |ui| {
-                        ui.horizontal(|ui| {
-                            let has_text = !self.manual_update_text.trim().is_empty();
-                            if ui
-                                .add_enabled(
-                                    has_text,
+                        ui.horizontal_centered(|ui| {
+                            if let Some(deadline) = self.close_update_after {
+                                // 解析成功后处于延迟关闭：主按钮显示关闭倒计时
+                                let remaining =
+                                    deadline.saturating_duration_since(std::time::Instant::now());
+                                let secs = (remaining.as_secs_f64().ceil() as u64).max(1);
+                                let label = self.i18n.t1("update_closing", &secs.to_string());
+                                ui.add_enabled(
+                                    false,
                                     egui::Button::new(
-                                        egui::RichText::new(self.i18n.t0("update_parse"))
+                                        egui::RichText::new(label)
                                             .size(13.0)
                                             .color(egui::Color32::WHITE),
                                     )
                                     .rounding(4.0)
-                                    .fill(if has_text {
-                                        GITHUB_BLUE
+                                    .fill(STATUS_OK_FG),
+                                );
+                            } else {
+                                let has_text = !self.manual_update_text.trim().is_empty();
+                                if ui
+                                    .add_enabled(
+                                        has_text,
+                                        egui::Button::new(
+                                            egui::RichText::new(self.i18n.t0("update_parse"))
+                                                .size(13.0)
+                                                .color(egui::Color32::WHITE),
+                                        )
+                                        .rounding(4.0)
+                                        .fill(if has_text {
+                                            GITHUB_BLUE
+                                        } else {
+                                            GITHUB_BORDER
+                                        }),
+                                    )
+                                    .clicked()
+                                {
+                                    let text = self.manual_update_text.clone();
+                                    if text.trim().is_empty() {
+                                        let msg = self.i18n.t0("status_paste_empty");
+                                        self.set_update_message(
+                                            crate::app::UpdateMessageKind::Error,
+                                            msg,
+                                        );
+                                    } else if self.config.active_account_id.is_none() {
+                                        let msg = self.i18n.t0("status_no_active_import");
+                                        self.set_update_message(
+                                            crate::app::UpdateMessageKind::Error,
+                                            msg,
+                                        );
                                     } else {
-                                        GITHUB_BORDER
-                                    }),
-                                )
-                                .clicked()
-                            {
-                                let text = self.manual_update_text.clone();
-                                if text.trim().is_empty() {
-                                    let msg = self.i18n.t0("status_paste_empty");
-                                    self.set_update_message(
-                                        crate::app::UpdateMessageKind::Error,
-                                        msg,
-                                    );
-                                } else if self.config.active_account_id.is_none() {
-                                    let msg = self.i18n.t0("status_no_active_import");
-                                    self.set_update_message(
-                                        crate::app::UpdateMessageKind::Error,
-                                        msg,
-                                    );
-                                } else {
-                                    match self.parse_login_output_and_update(&text) {
-                                        Ok(()) => {
-                                            // 仅解析成功才关闭窗口：记录结果消息后再关
-                                            self.import_current_auth();
-                                            self.manual_update_text.clear();
-                                            let msg = self.status_message.clone();
-                                            self.set_update_message(
-                                                crate::app::UpdateMessageKind::Success,
-                                                msg,
-                                            );
-                                            self.schedule_update_window_close(
-                                                std::time::Duration::from_millis(1500),
-                                            );
-                                        }
-                                        Err(e) => {
-                                            // 解析失败：窗口与原始内容保留，消息区显示「解析失败」
-                                            self.mark_parse_failed(e);
+                                        match self.parse_login_output_and_update(&text) {
+                                            Ok(()) => {
+                                                // 仅解析成功才关闭窗口：记录结果消息后再关
+                                                self.import_current_auth();
+                                                self.manual_update_text.clear();
+                                                let msg = self.status_message.clone();
+                                                self.set_update_message(
+                                                    crate::app::UpdateMessageKind::Success,
+                                                    msg,
+                                                );
+                                                self.schedule_update_window_close(
+                                                    std::time::Duration::from_millis(3000),
+                                                );
+                                            }
+                                            Err(e) => {
+                                                // 解析失败：窗口与原始内容保留，消息区显示「解析失败」
+                                                self.mark_parse_failed(e);
+                                            }
                                         }
                                     }
                                 }
@@ -482,7 +504,19 @@ impl AtomcodeSwitchApp {
                             ui.with_layout(
                                 egui::Layout::right_to_left(egui::Align::Center),
                                 |ui| {
-                                    if ui.button(self.i18n.t0("btn_cancel")).clicked() {
+                                    if ui
+                                        .add(
+                                            egui::Button::new(
+                                                egui::RichText::new(self.i18n.t0("btn_cancel"))
+                                                    .size(13.0)
+                                                    .color(GITHUB_TEXT_PRIMARY),
+                                            )
+                                            .rounding(4.0)
+                                            .fill(GITHUB_CARD)
+                                            .stroke(egui::Stroke::new(1.0_f32, GITHUB_BORDER)),
+                                        )
+                                        .clicked()
+                                    {
                                         self.close_update_window();
                                     }
                                 },

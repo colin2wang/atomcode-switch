@@ -13,7 +13,8 @@
 - **Four-level account badge colors** — `Normal` / `Expiring` / `Expired` / `Invalid` now render as badges with distinct backgrounds and foregrounds, unified to the GitHub palette (`STATUS_OK_*`, `STATUS_EXPIRING_*`, `STATUS_EXPIRED_*`, `STATUS_INVALID_*`). Card borders, progress bars and countdown text use the same semantic colors; removed the redundant `●` prefix from badge labels. Thresholds (`EXPIRING_SOON_SECS`) and the single expiring color are now shared constants.
 - **Card border theme colors** — cards use a white background with a state-themed border: active/selected = red (`GITHUB_RED`, overrides state color), Normal = green, Expiring = blue, Expired = yellow, Invalid = red. Badges, progress bars and countdown text follow the same per-state theme (expiring blue, expired yellow).
 - **Sub-window icon** — the "Update Account Info" viewport reuses the main window icon via a shared `Arc<IconData>` on the app state.
-- **i18n cleanup** — removed the dead `status_fetched` key; added `status_export_failed`, `status_accounts_file_invalid`, `status_login_user_unmatched`, `dialog_import_failed_title` to both locales and `ALL_KEYS`.
+- **Update-window polish** — the bottom action bar now uses a white fill with a top divider, symmetric margins and vertically centered buttons of consistent size (`horizontal_centered`). On a successful parse the window stays open for 3 seconds (up from 1.5s) and the "Parse & Update" button shows a live closing countdown (`update_closing`) instead; both parse paths share the 3-second delay, and repaint frequency increases during the countdown for an accurate readout.
+- **i18n cleanup** — removed the dead `status_fetched` key; added `status_export_failed`, `status_accounts_file_invalid`, `status_login_user_unmatched`, `dialog_import_failed_title`, `update_closing` to both locales and `ALL_KEYS`.
 
 ### Added
 - **Badge color unit test** — verifies the four states have distinct background and foreground colors.

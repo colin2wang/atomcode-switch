@@ -14,8 +14,8 @@ const FETCH_TIMEOUT: Duration = Duration::from_secs(10);
 const FLUSH_WINDOW: Duration = Duration::from_millis(500);
 /// 轮询进程状态的间隔。
 const POLL_INTERVAL: Duration = Duration::from_millis(100);
-/// 成功消息展示时长。
-const SUCCESS_DISPLAY: Duration = Duration::from_millis(1500);
+/// 成功消息展示时长（与手动解析路径的 3 秒关闭倒计时保持一致）。
+const SUCCESS_DISPLAY: Duration = Duration::from_secs(3);
 
 impl AtomcodeSwitchApp {
     /// 启动自动获取：隐藏窗口执行 `atomcode login`，捕获输出填入文本框。

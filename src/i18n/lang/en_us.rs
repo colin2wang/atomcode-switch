@@ -68,6 +68,7 @@ pub fn get(key: &str) -> &str {
         "update_fetching" => "Fetching...",
         "update_cancel" => "Cancel",
         "update_parse" => "Parse & Update",
+        "update_closing" => "Closing ({0})",
         "update_hint" => "Paste /login output here, or click \"Re-fetch\" above...",
         "update_error_title" => "Parse failed — window and original content are kept",
         "update_parse_failed" => "Parse failed: {0}",
