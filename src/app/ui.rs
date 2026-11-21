@@ -50,18 +50,21 @@ impl AccountVisualState {
         }
     }
 
-    /// 卡片底色与边框色：正常卡片沿用白底 + 激活红边/非激活灰边；
-    /// 异常/过期卡片用极淡灰白底 + 语义色边框，在层级上弱化并提示处理。
+    /// 卡片底色与边框色：统一白底，按主题给边框上色。
+    /// 选中的激活账号用红色边框（覆盖状态色）；未选中账号按状态着色：
+    /// 正常=绿、即将过期=蓝、已过期=黄、已失效=红。
     fn card_colors(self, is_active: bool) -> (egui::Color32, egui::Color32) {
-        match self {
-            Self::Invalid => (CARD_EXPIRED_BG, STATUS_INVALID_FG),
-            Self::Expired => (CARD_EXPIRED_BG, STATUS_EXPIRED_FG),
-            Self::Expiring => (CARD_EXPIRED_BG, STATUS_EXPIRING_FG),
-            Self::Normal => (
-                egui::Color32::WHITE,
-                if is_active { GITHUB_RED } else { GITHUB_BORDER },
-            ),
-        }
+        let stroke = if is_active {
+            GITHUB_RED
+        } else {
+            match self {
+                Self::Normal => STATUS_OK_FG,
+                Self::Expiring => STATUS_EXPIRING_FG,
+                Self::Expired => STATUS_EXPIRED_FG,
+                Self::Invalid => STATUS_INVALID_FG,
+            }
+        };
+        (egui::Color32::WHITE, stroke)
     }
 
     /// 进度条填充色：异常/过期卡片改用语义色，正常卡片仍按用量百分比着色。
@@ -1322,7 +1325,7 @@ impl AtomcodeSwitchApp {
         };
         let diff_secs = (target - now).num_seconds();
         if diff_secs < 0 {
-            // 已过期但需用户关注：橙红提醒
+            // 已过期：黄色主题提醒
             return (
                 self.i18n.t1("card_reset_expired", reset_time.trim()),
                 STATUS_EXPIRED_FG,
@@ -1331,7 +1334,7 @@ impl AtomcodeSwitchApp {
         let diff = diff_secs as u64;
         let minutes = diff / 60;
         let seconds = diff % 60;
-        // 即将过期（1 小时内）用琥珀提醒
+        // 即将过期（1 小时内）用蓝色主题提醒
         let color = if diff < EXPIRING_SOON_SECS {
             STATUS_EXPIRING_FG
         } else {
